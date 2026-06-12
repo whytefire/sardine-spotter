@@ -62,11 +62,17 @@ export async function unsubscribeFromPush(token: string): Promise<boolean> {
     const registration = await navigator.serviceWorker.getRegistration();
     const subscription = await registration?.pushManager.getSubscription();
 
+    // Capture the endpoint BEFORE we call .unsubscribe(), because some browsers
+    // tear down the subscription object once it's been unsubscribed. We pass
+    // the endpoint to the API so only THIS device is removed from the user's
+    // push fan-out, not every device they've ever logged in on.
+    const endpoint = subscription?.endpoint;
+
     if (subscription) {
       await subscription.unsubscribe();
     }
 
-    await api.unsubscribePush(token);
+    await api.unsubscribePush(token, endpoint);
     return true;
   } catch (err) {
     console.error("Push unsubscribe failed:", err);

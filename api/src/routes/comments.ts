@@ -1,6 +1,7 @@
 import { Router, Response } from "express";
 import { authenticate, AuthRequest } from "../middleware/auth";
 import { getPool } from "../config/database";
+import { notifyNewComment } from "../services/notifications";
 
 const router = Router();
 
@@ -60,6 +61,22 @@ router.post("/:sightingId", authenticate, async (req: AuthRequest, res: Response
       );
 
     const comment = result.recordset[0];
+
+    // Look up the commenter's nickname for the push payload
+    const actorResult = await pool
+      .request()
+      .input("uid", req.user!.userId)
+      .query("SELECT nickname FROM Users WHERE id = @uid");
+    const actorNickname = actorResult.recordset[0]?.nickname || "Someone";
+
+    // Fire-and-forget: in-app + push to sighting author + previous commenters
+    notifyNewComment({
+      id: comment.id,
+      sightingId: Number(req.params.sightingId),
+      actorUserId: req.user!.userId,
+      actorNickname,
+      text: text.trim(),
+    }).catch((err) => console.error("Comment notification error:", err));
 
     res.status(201).json({
       success: true,

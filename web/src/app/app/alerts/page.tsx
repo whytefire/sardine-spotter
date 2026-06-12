@@ -1,13 +1,52 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { MapPin, Clock, Check, Bell, Loader2, RefreshCw } from "lucide-react";
+import {
+  MapPin,
+  Clock,
+  Check,
+  Bell,
+  Loader2,
+  RefreshCw,
+  Fish,
+  MessageCircle,
+} from "lucide-react";
 import { cn, timeAgo } from "@/lib/utils";
 import { motion } from "framer-motion";
 import { useAuth } from "@/lib/auth-context";
 import { api } from "@/lib/api";
 import type { Notification, Sighting } from "@/lib/types";
 import { SightingDetailModal } from "@/components/app/SightingDetailModal";
+
+function notificationCopy(n: Notification) {
+  const actorName = n.actor?.nickname ?? "Someone";
+
+  if (n.kind === "comment") {
+    const subject =
+      n.sighting.nickname && n.sighting.nickname !== actorName
+        ? `${n.sighting.nickname}'s sighting`
+        : "a sighting";
+    return {
+      headline: (
+        <>
+          <span className="font-semibold">{actorName}</span> commented on {subject}
+        </>
+      ),
+      detail: n.comment?.text ?? n.sighting.description,
+      Icon: MessageCircle,
+    };
+  }
+
+  return {
+    headline: (
+      <>
+        <span className="font-semibold">{actorName}</span> reported a sighting
+      </>
+    ),
+    detail: n.sighting.description,
+    Icon: Fish,
+  };
+}
 
 export default function AlertsPage() {
   const { token } = useAuth();
@@ -102,7 +141,7 @@ export default function AlertsPage() {
           </div>
           <p className="text-deep-600 dark:text-deep-300 text-sm mt-1">
             {unreadCount > 0
-              ? `${unreadCount} new sighting${unreadCount !== 1 ? "s" : ""} near you`
+              ? `${unreadCount} new update${unreadCount !== 1 ? "s" : ""}`
               : "You're all caught up"}
           </p>
         </div>
@@ -145,74 +184,107 @@ export default function AlertsPage() {
       {/* Notification cards */}
       {!loading && !error && notifications.length > 0 && (
         <div className="space-y-2">
-          {notifications.map((notification, index) => (
-            <motion.div
-              key={notification.id}
-              initial={{ opacity: 0, x: -10 }}
-              animate={{ opacity: 1, x: 0 }}
-              transition={{ delay: Math.min(index * 0.04, 0.4) }}
-              className={cn(
-                "group relative rounded-2xl transition-all",
-                !notification.read && "accent-border-left"
-              )}
-            >
-              <button
-                type="button"
-                onClick={() => handleOpenAlert(notification)}
-                disabled={openingId === notification.id}
+          {notifications.map((notification, index) => {
+            const { headline, detail, Icon } = notificationCopy(notification);
+            const actorInitial =
+              notification.actor?.nickname?.[0]?.toUpperCase() ??
+              notification.sighting.nickname?.[0]?.toUpperCase() ??
+              "?";
+            const isComment = notification.kind === "comment";
+
+            return (
+              <motion.div
+                key={notification.id}
+                initial={{ opacity: 0, x: -10 }}
+                animate={{ opacity: 1, x: 0 }}
+                transition={{ delay: Math.min(index * 0.04, 0.4) }}
                 className={cn(
-                  "w-full text-left flex items-start gap-3 p-4 rounded-2xl transition-all focus:outline-none focus-visible:ring-2 focus-visible:ring-ocean-500",
-                  notification.read
-                    ? "bg-white dark:bg-deep-800 border border-deep-200 dark:border-deep-700 hover:border-ocean-300 dark:hover:border-ocean-700"
-                    : "bg-ocean-50/50 dark:bg-ocean-900/20 border border-ocean-200/50 dark:border-ocean-700/30 hover:border-ocean-400 dark:hover:border-ocean-600"
+                  "group relative rounded-2xl transition-all",
+                  !notification.read && "accent-border-left"
                 )}
               >
-                {/* Avatar */}
-                <div className="relative flex-shrink-0">
-                  <div className="avatar-ring">
-                    <div className="w-10 h-10 rounded-full flex items-center justify-center bg-gradient-to-br from-ocean-500 to-ocean-600 text-white font-bold text-sm">
-                      {notification.sighting.nickname[0]?.toUpperCase() || "?"}
+                <button
+                  type="button"
+                  onClick={() => handleOpenAlert(notification)}
+                  disabled={openingId === notification.id}
+                  className={cn(
+                    "w-full text-left flex items-start gap-3 p-4 rounded-2xl transition-all focus:outline-none focus-visible:ring-2 focus-visible:ring-ocean-500",
+                    notification.read
+                      ? "bg-white dark:bg-deep-800 border border-deep-200 dark:border-deep-700 hover:border-ocean-300 dark:hover:border-ocean-700"
+                      : "bg-ocean-50/50 dark:bg-ocean-900/20 border border-ocean-200/50 dark:border-ocean-700/30 hover:border-ocean-400 dark:hover:border-ocean-600"
+                  )}
+                >
+                  {/* Avatar with kind badge */}
+                  <div className="relative flex-shrink-0">
+                    <div className="avatar-ring">
+                      <div
+                        className={cn(
+                          "w-10 h-10 rounded-full flex items-center justify-center text-white font-bold text-sm",
+                          isComment
+                            ? "bg-gradient-to-br from-coral-500 to-coral-600"
+                            : "bg-gradient-to-br from-ocean-500 to-ocean-600"
+                        )}
+                      >
+                        {actorInitial}
+                      </div>
+                    </div>
+                    <span
+                      className={cn(
+                        "absolute -bottom-0.5 -right-0.5 w-5 h-5 rounded-full flex items-center justify-center border-2 border-white dark:border-deep-850",
+                        isComment ? "bg-coral-500" : "bg-ocean-500"
+                      )}
+                      aria-hidden="true"
+                    >
+                      <Icon className="w-2.5 h-2.5 text-white" />
+                    </span>
+                    {!notification.read && (
+                      <span className="absolute -top-0.5 -right-0.5 w-3 h-3 rounded-full bg-coral-500 border-2 border-ocean-50 dark:border-deep-850" />
+                    )}
+                  </div>
+
+                  {/* Content */}
+                  <div className="flex-1 min-w-0">
+                    <p
+                      className={cn(
+                        "text-sm leading-snug",
+                        notification.read
+                          ? "text-deep-700 dark:text-deep-300"
+                          : "text-deep-900 dark:text-white"
+                      )}
+                    >
+                      {headline}
+                    </p>
+                    <p
+                      className={cn(
+                        "text-sm leading-relaxed line-clamp-2 mt-0.5",
+                        notification.read
+                          ? "text-deep-600 dark:text-deep-400"
+                          : "text-deep-800 dark:text-deep-200",
+                        isComment && "italic"
+                      )}
+                    >
+                      {isComment ? `“${detail}”` : detail}
+                    </p>
+                    <div className="flex items-center gap-2 mt-2 flex-wrap">
+                      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-surface-100 dark:bg-deep-800 text-xs text-deep-600 dark:text-deep-300">
+                        <Clock className="w-3 h-3" />
+                        {timeAgo(notification.createdAt)}
+                      </span>
+                      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-surface-100 dark:bg-deep-800 text-xs text-deep-600 dark:text-deep-300">
+                        <MapPin className="w-3 h-3" />
+                        {notification.sighting.latitude.toFixed(3)}°,{" "}
+                        {notification.sighting.longitude.toFixed(3)}°
+                      </span>
                     </div>
                   </div>
-                  {!notification.read && (
-                    <span className="absolute -top-0.5 -right-0.5 w-3 h-3 rounded-full bg-coral-500 border-2 border-ocean-50 dark:border-deep-850" />
+
+                  {openingId === notification.id && (
+                    <Loader2 className="w-4 h-4 animate-spin text-ocean-500 dark:text-ocean-400 flex-shrink-0 mt-2" />
                   )}
-                </div>
-
-                {/* Content */}
-                <div className="flex-1 min-w-0">
-                  <p
-                    className={cn(
-                      "text-sm leading-relaxed line-clamp-2",
-                      notification.read
-                        ? "text-deep-700 dark:text-deep-300"
-                        : "text-deep-900 dark:text-white"
-                    )}
-                  >
-                    <span className="font-semibold">
-                      {notification.sighting.nickname}
-                    </span>{" "}
-                    reported: {notification.sighting.description}
-                  </p>
-                  <div className="flex items-center gap-2 mt-2 flex-wrap">
-                    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-surface-100 dark:bg-deep-800 text-xs text-deep-600 dark:text-deep-300">
-                      <Clock className="w-3 h-3" />
-                      {timeAgo(notification.createdAt)}
-                    </span>
-                    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-surface-100 dark:bg-deep-800 text-xs text-deep-600 dark:text-deep-300">
-                      <MapPin className="w-3 h-3" />
-                      {notification.sighting.latitude.toFixed(3)}°,{" "}
-                      {notification.sighting.longitude.toFixed(3)}°
-                    </span>
-                  </div>
-                </div>
-
-                {openingId === notification.id && (
-                  <Loader2 className="w-4 h-4 animate-spin text-ocean-500 dark:text-ocean-400 flex-shrink-0 mt-2" />
-                )}
-              </button>
-            </motion.div>
-          ))}
+                </button>
+              </motion.div>
+            );
+          })}
         </div>
       )}
 
@@ -226,8 +298,9 @@ export default function AlertsPage() {
             No alerts yet
           </p>
           <p className="text-deep-500 dark:text-deep-400 text-sm mt-1 max-w-xs mx-auto">
-            You&apos;ll be notified here when sardines are spotted near you.
-            Make sure push notifications are enabled in Settings.
+            You&apos;ll be notified here when someone reports a sighting or
+            comments on one. Make sure push notifications are enabled in
+            Settings.
           </p>
         </div>
       )}

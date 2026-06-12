@@ -72,11 +72,17 @@ GO
 -- =============================================
 -- NOTIFICATIONS
 -- =============================================
+-- kind: 'sighting' (new report) | 'comment' (someone commented on a sighting)
+-- actor_id: who did the action (reporter for sighting, commenter for comment)
+-- comment_id: set only when kind = 'comment'
 IF NOT EXISTS (SELECT * FROM sys.tables WHERE name = 'Notifications')
 CREATE TABLE Notifications (
     id              INT IDENTITY(1,1) PRIMARY KEY,
     user_id         INT             NOT NULL REFERENCES Users(id),
     sighting_id     INT             NOT NULL REFERENCES Sightings(id) ON DELETE CASCADE,
+    kind            NVARCHAR(20)    NOT NULL DEFAULT 'sighting',
+    actor_id        INT             NULL REFERENCES Users(id),
+    comment_id      INT             NULL REFERENCES Comments(id),
     is_read         BIT             NOT NULL DEFAULT 0,
     created_at      DATETIME        NOT NULL DEFAULT GETDATE()
 );
@@ -85,6 +91,31 @@ GO
 CREATE NONCLUSTERED INDEX IX_Notifications_UserId
     ON Notifications (user_id, is_read)
     INCLUDE (sighting_id, created_at);
+GO
+
+CREATE NONCLUSTERED INDEX IX_Notifications_UserKind
+    ON Notifications (user_id, kind, created_at DESC);
+GO
+
+-- =============================================
+-- PUSH SUBSCRIPTIONS (one row per device per user)
+-- =============================================
+IF NOT EXISTS (SELECT * FROM sys.tables WHERE name = 'PushSubscriptions')
+CREATE TABLE PushSubscriptions (
+    id              INT IDENTITY(1,1) PRIMARY KEY,
+    user_id         INT             NOT NULL REFERENCES Users(id) ON DELETE CASCADE,
+    endpoint        NVARCHAR(500)   NOT NULL UNIQUE,
+    p256dh          NVARCHAR(500)   NOT NULL,
+    auth            NVARCHAR(255)   NOT NULL,
+    user_agent      NVARCHAR(500)   NULL,
+    created_at      DATETIME        NOT NULL DEFAULT GETDATE(),
+    last_used_at    DATETIME        NOT NULL DEFAULT GETDATE()
+);
+GO
+
+CREATE NONCLUSTERED INDEX IX_PushSubscriptions_UserId
+    ON PushSubscriptions (user_id)
+    INCLUDE (endpoint, p256dh, auth);
 GO
 
 -- =============================================

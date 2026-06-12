@@ -113,8 +113,12 @@ export const api = {
       body: JSON.stringify(subscription.toJSON()),
     }),
 
-  unsubscribePush: (token: string) =>
-    apiFetch("/api/notifications/unsubscribe", { method: "POST", token }),
+  unsubscribePush: (token: string, endpoint?: string) =>
+    apiFetch("/api/notifications/unsubscribe", {
+      method: "POST",
+      token,
+      body: JSON.stringify({ endpoint }),
+    }),
 
   // Upload
   uploadPhoto: async (

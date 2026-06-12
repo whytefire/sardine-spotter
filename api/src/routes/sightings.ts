@@ -1,7 +1,7 @@
 import { Router, Response } from "express";
 import { authenticate, AuthRequest } from "../middleware/auth";
 import { getPool } from "../config/database";
-import { notifyNearbyUsers } from "../services/notifications";
+import { notifyNewSighting } from "../services/notifications";
 
 const router = Router();
 
@@ -107,15 +107,12 @@ router.post("/", authenticate, async (req: AuthRequest, res: Response) => {
       .query("SELECT nickname FROM Users WHERE id = @uid");
     const nickname = userResult.recordset[0]?.nickname || "Someone";
 
-    // Fire-and-forget: notify nearby users via push
-    notifyNearbyUsers({
+    // Fire-and-forget: in-app + push to every other active user
+    notifyNewSighting({
       id: sighting.id,
       userId: req.user!.userId,
       nickname,
       description,
-      latitude,
-      longitude,
-      category: category || "sardine_sighting",
     }).catch((err) => console.error("Push notification error:", err));
 
     res.status(201).json({

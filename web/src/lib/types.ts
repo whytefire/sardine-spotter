@@ -23,10 +23,27 @@ export interface Comment {
   createdAt: string;
 }
 
+export type NotificationKind = "sighting" | "comment";
+
+export interface NotificationActor {
+  id: number;
+  nickname: string;
+  avatarUrl?: string | null;
+}
+
+export interface NotificationCommentBody {
+  id: number;
+  text: string;
+}
+
 export interface Notification {
   id: number;
   read: boolean;
   createdAt: string;
+  kind: NotificationKind;
+  /** Who did the action — reporter for sightings, commenter for comments. May be null for legacy rows. */
+  actor: NotificationActor | null;
+  /** The sighting the notification refers to. `nickname` / `avatarUrl` here are the sighting AUTHOR. */
   sighting: {
     id: number;
     description: string;
@@ -38,6 +55,8 @@ export interface Notification {
     nickname: string;
     avatarUrl?: string | null;
   };
+  /** Only set when kind === 'comment'. */
+  comment: NotificationCommentBody | null;
 }
 
 export interface ApiEnvelope<T> {
