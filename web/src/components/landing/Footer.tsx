@@ -1,0 +1,92 @@
+import { Fish, Heart } from "lucide-react";
+import Link from "next/link";
+
+export default function Footer() {
+  return (
+    <footer className="bg-deep-950 dark:bg-deep-950/95 text-white relative">
+      {/* Subtle top wave decoration */}
+      <div className="absolute top-0 left-0 right-0 h-px bg-gradient-to-r from-transparent via-ocean-500/30 to-transparent" />
+
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-16">
+        <div className="grid grid-cols-1 md:grid-cols-4 gap-12">
+          {/* Brand */}
+          <div className="md:col-span-2">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-ocean-500 to-ocean-700 flex items-center justify-center shadow-lg shadow-ocean-500/25">
+                <Fish className="w-6 h-6 text-white" />
+              </div>
+              <span className="text-xl font-display font-bold">
+                Sardine Spotter
+              </span>
+            </div>
+            <p className="mt-4 text-ocean-200/50 max-w-md leading-relaxed">
+              A free community app helping South Africa&apos;s KwaZulu-Natal coast
+              track the annual sardine run migration. Built by sardine enthusiasts,
+              for sardine enthusiasts.
+            </p>
+          </div>
+
+          {/* App links */}
+          <div>
+            <h3 className="font-display font-semibold text-ocean-100 mb-4">
+              App
+            </h3>
+            <ul className="space-y-3">
+              {[
+                { label: "Live Map", href: "/map" },
+                { label: "Sign Up", href: "/register" },
+                { label: "Log In", href: "/login" },
+                { label: "How It Works", href: "/#how-it-works" },
+              ].map((link) => (
+                <li key={link.href}>
+                  <Link
+                    href={link.href}
+                    className="text-ocean-200/50 hover:text-ocean-300 transition-colors duration-200"
+                  >
+                    {link.label}
+                  </Link>
+                </li>
+              ))}
+            </ul>
+          </div>
+
+          {/* Info links */}
+          <div>
+            <h3 className="font-display font-semibold text-ocean-100 mb-4">
+              Info
+            </h3>
+            <ul className="space-y-3">
+              {[
+                { label: "About Us", href: "/about" },
+                { label: "Contact", href: "/contact" },
+                { label: "Privacy Policy", href: "/privacy" },
+                { label: "Terms of Use", href: "/terms" },
+              ].map((link) => (
+                <li key={link.href}>
+                  <Link
+                    href={link.href}
+                    className="text-ocean-200/50 hover:text-ocean-300 transition-colors duration-200"
+                  >
+                    {link.label}
+                  </Link>
+                </li>
+              ))}
+            </ul>
+          </div>
+        </div>
+
+        {/* Bottom bar */}
+        <div className="mt-16 pt-8 border-t border-white/10 flex flex-col sm:flex-row items-center justify-between gap-4">
+          <p className="text-ocean-200/40 text-sm">
+            &copy; {new Date().getFullYear()} Sardine Spotter. All rights reserved.
+          </p>
+          <p className="text-ocean-200/40 text-sm flex items-center gap-1.5">
+            Made with{" "}
+            <Heart className="w-3.5 h-3.5 text-coral-500 fill-coral-500" />{" "}
+            on the KZN Coast
+          </p>
+        </div>
+      </div>
+    </footer>
+  );
+}
