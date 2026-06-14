@@ -25,6 +25,8 @@ interface SightingDetailModalProps {
   isOpen: boolean;
   onClose: () => void;
   onDelete?: (id: number) => void;
+  /** Called whenever like state changes so callers can keep their list in sync. */
+  onLikeChange?: (id: number, likeCount: number, likedByMe: boolean) => void;
 }
 
 export function SightingDetailModal({
@@ -32,6 +34,7 @@ export function SightingDetailModal({
   isOpen,
   onClose,
   onDelete,
+  onLikeChange,
 }: SightingDetailModalProps) {
   const { user, token } = useAuth();
   const [comments, setComments] = useState<Comment[]>([]);
@@ -70,9 +73,11 @@ export function SightingDetailModal({
   const handleToggleLike = async () => {
     if (!token || !sighting || likeBusy) return;
     const next = !liked;
+    const optimisticCount = Math.max(0, likeCount + (next ? 1 : -1));
     // Optimistic — flip locally first, only roll back on failure
     setLiked(next);
-    setLikeCount((c) => Math.max(0, c + (next ? 1 : -1)));
+    setLikeCount(optimisticCount);
+    onLikeChange?.(sighting.id, optimisticCount, next);
     setLikeBusy(true);
     try {
       const res = next
@@ -81,10 +86,13 @@ export function SightingDetailModal({
       // Server is source of truth — sync the canonical count
       setLikeCount(res.data.likeCount);
       setLiked(res.data.likedByMe);
+      onLikeChange?.(sighting.id, res.data.likeCount, res.data.likedByMe);
     } catch (err) {
       console.error("Failed to toggle like:", err);
       setLiked(!next);
-      setLikeCount((c) => Math.max(0, c + (next ? -1 : 1)));
+      const rollbackCount = Math.max(0, likeCount);
+      setLikeCount(rollbackCount);
+      onLikeChange?.(sighting.id, rollbackCount, !next);
     } finally {
       setLikeBusy(false);
     }

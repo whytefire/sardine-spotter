@@ -34,13 +34,44 @@ const avatarColors = [
 function SightingCard({
   sighting,
   index,
+  token,
   onOpen,
+  onLikeChange,
 }: {
   sighting: Sighting;
   index: number;
+  token: string | null;
   onOpen: () => void;
+  onLikeChange: (id: number, likeCount: number, likedByMe: boolean) => void;
 }) {
   const photo = photoSrc(sighting.photoUrl);
+  const [likeBusy, setLikeBusy] = useState(false);
+
+  const handleLikeToggle = async () => {
+    if (!token || likeBusy) return;
+    const next = !sighting.likedByMe;
+    setLikeBusy(true);
+    // Optimistic — bump the parent's copy first so the heart fills instantly.
+    onLikeChange(
+      sighting.id,
+      Math.max(0, sighting.likeCount + (next ? 1 : -1)),
+      next
+    );
+    try {
+      const res = next
+        ? await api.likeSighting(token, sighting.id)
+        : await api.unlikeSighting(token, sighting.id);
+      // Sync to the server's canonical count
+      onLikeChange(sighting.id, res.data.likeCount, res.data.likedByMe);
+    } catch (err) {
+      console.error("Failed to toggle like:", err);
+      // Roll back the optimistic update
+      onLikeChange(sighting.id, sighting.likeCount, sighting.likedByMe);
+    } finally {
+      setLikeBusy(false);
+    }
+  };
+
   return (
     <motion.article
       initial={{ opacity: 0, y: 24 }}
@@ -51,11 +82,14 @@ function SightingCard({
       {/* Teal accent stripe */}
       <div className="absolute left-0 top-0 bottom-0 w-1 bg-gradient-to-b from-ocean-400 to-ocean-600" aria-hidden="true" />
 
+      {/* Clickable upper region — opens the modal. The action bar below is
+          rendered OUTSIDE this button so the heart can be its own real button.
+          (HTML doesn't allow buttons inside buttons.) */}
       <button
         type="button"
         onClick={onOpen}
         aria-label={`Open sighting from ${sighting.nickname}`}
-        className="block w-full text-left p-5 pl-6 cursor-pointer"
+        className="block w-full text-left p-5 pl-6 pb-0 cursor-pointer"
       >
         {/* Header */}
         <div className="flex items-start justify-between gap-3">
@@ -110,48 +144,63 @@ function SightingCard({
             />
           </div>
         ) : null}
-
-        {/* Actions */}
-        <div
-          className="mt-4 pt-3.5 border-t border-deep-100 dark:border-deep-800 flex items-center justify-between"
-          onClick={(e) => e.stopPropagation()}
-        >
-          <div className="flex items-center gap-4">
-            <div
-              className={cn(
-                "flex items-center gap-1.5 text-sm",
-                sighting.likedByMe
-                  ? "text-coral-500 dark:text-coral-400"
-                  : "text-deep-600 dark:text-deep-300"
-              )}
-            >
-              <Heart
-                className={cn(
-                  "w-4 h-4",
-                  sighting.likedByMe && "fill-current"
-                )}
-              />
-              <span className="font-semibold tabular-nums">
-                {sighting.likeCount}
-              </span>
-              <span className="text-deep-500 dark:text-deep-400">
-                {sighting.likeCount === 1 ? "like" : "likes"}
-              </span>
-            </div>
-            <div className="flex items-center gap-1.5 text-deep-600 dark:text-deep-300 text-sm">
-              <Waves className="w-4 h-4" />
-              <span className="font-semibold tabular-nums">{sighting.commentCount}</span>
-              <span className="text-deep-500 dark:text-deep-400">
-                {sighting.commentCount === 1 ? "comment" : "comments"}
-              </span>
-            </div>
-          </div>
-          <span className="inline-flex items-center gap-1.5 text-xs font-semibold text-ocean-600 dark:text-ocean-400 group-hover:text-ocean-700 dark:group-hover:text-ocean-300 transition-colors">
-            <MessageCircle className="w-3.5 h-3.5" />
-            Open
-          </span>
-        </div>
       </button>
+
+      {/* Action bar — outside the open button so we can have real buttons */}
+      <div className="px-5 pl-6 pt-3.5 pb-5 mt-4 border-t border-deep-100 dark:border-deep-800 flex items-center justify-between">
+        <div className="flex items-center gap-2 sm:gap-3">
+          <button
+            type="button"
+            onClick={handleLikeToggle}
+            disabled={!token || likeBusy}
+            aria-pressed={sighting.likedByMe}
+            aria-label={
+              sighting.likedByMe
+                ? `Unlike sighting (${sighting.likeCount} likes)`
+                : `Like sighting (${sighting.likeCount} likes)`
+            }
+            className={cn(
+              "flex items-center gap-1.5 text-sm px-2.5 py-1.5 rounded-lg transition-all min-h-[36px] focus:outline-none focus-visible:ring-2 focus-visible:ring-ocean-500 disabled:opacity-50 disabled:cursor-not-allowed",
+              sighting.likedByMe
+                ? "text-coral-500 dark:text-coral-400 hover:bg-coral-50 dark:hover:bg-coral-950/30"
+                : "text-deep-600 dark:text-deep-300 hover:bg-deep-100 dark:hover:bg-deep-800 hover:text-coral-500 dark:hover:text-coral-400"
+            )}
+          >
+            <Heart
+              className={cn(
+                "w-4 h-4 transition-transform",
+                sighting.likedByMe && "fill-current scale-110"
+              )}
+            />
+            <span className="font-semibold tabular-nums">
+              {sighting.likeCount}
+            </span>
+            <span className="text-deep-500 dark:text-deep-400 hidden sm:inline">
+              {sighting.likeCount === 1 ? "like" : "likes"}
+            </span>
+          </button>
+          <button
+            type="button"
+            onClick={onOpen}
+            aria-label={`Open comments (${sighting.commentCount})`}
+            className="flex items-center gap-1.5 text-sm px-2.5 py-1.5 rounded-lg text-deep-600 dark:text-deep-300 hover:bg-deep-100 dark:hover:bg-deep-800 transition-all min-h-[36px] focus:outline-none focus-visible:ring-2 focus-visible:ring-ocean-500"
+          >
+            <Waves className="w-4 h-4" />
+            <span className="font-semibold tabular-nums">{sighting.commentCount}</span>
+            <span className="text-deep-500 dark:text-deep-400 hidden sm:inline">
+              {sighting.commentCount === 1 ? "comment" : "comments"}
+            </span>
+          </button>
+        </div>
+        <button
+          type="button"
+          onClick={onOpen}
+          className="inline-flex items-center gap-1.5 text-xs font-semibold text-ocean-600 dark:text-ocean-400 hover:text-ocean-700 dark:hover:text-ocean-300 transition-colors px-2.5 py-1.5 rounded-lg hover:bg-ocean-50 dark:hover:bg-ocean-950/30 focus:outline-none focus-visible:ring-2 focus-visible:ring-ocean-500"
+        >
+          <MessageCircle className="w-3.5 h-3.5" />
+          Open
+        </button>
+      </div>
     </motion.article>
   );
 }
@@ -218,6 +267,15 @@ export default function FeedPage() {
 
   const handleDelete = (id: number) => {
     setSightings((prev) => prev.filter((s) => s.id !== id));
+  };
+
+  const handleLikeChange = (id: number, likeCount: number, likedByMe: boolean) => {
+    setSightings((prev) =>
+      prev.map((s) => (s.id === id ? { ...s, likeCount, likedByMe } : s))
+    );
+    if (selected?.id === id) {
+      setSelected((s) => (s ? { ...s, likeCount, likedByMe } : s));
+    }
   };
 
   return (
@@ -332,7 +390,9 @@ export default function FeedPage() {
               key={sighting.id}
               sighting={sighting}
               index={index}
+              token={token}
               onOpen={() => openSighting(sighting)}
+              onLikeChange={handleLikeChange}
             />
           ))}
         </div>
@@ -343,6 +403,7 @@ export default function FeedPage() {
         isOpen={modalOpen}
         onClose={closeModal}
         onDelete={handleDelete}
+        onLikeChange={handleLikeChange}
       />
     </div>
   );

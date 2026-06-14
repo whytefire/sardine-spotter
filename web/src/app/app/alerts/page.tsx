@@ -338,6 +338,11 @@ export default function AlertsPage() {
         isOpen={modalOpen}
         onClose={() => setModalOpen(false)}
         onDelete={handleSightingDeleted}
+        onLikeChange={(id, likeCount, likedByMe) =>
+          setActiveSighting((s) =>
+            s && s.id === id ? { ...s, likeCount, likedByMe } : s
+          )
+        }
       />
     </div>
   );
