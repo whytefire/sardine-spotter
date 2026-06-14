@@ -10,13 +10,15 @@ import {
 } from "react";
 import { api } from "./api";
 
-interface User {
+export interface User {
   id: number;
   email: string;
   nickname: string;
   role: "god" | "admin" | "user";
   radius: number;
-  avatarUrl?: string;
+  avatarUrl?: string | null;
+  createdAt?: string;
+  lastActive?: string;
 }
 
 interface AuthContextType {
@@ -30,6 +32,12 @@ interface AuthContextType {
     nickname: string,
   ) => Promise<void>;
   logout: () => void;
+  /** Replace the cached user. Use after account edits when you already have the updated record. */
+  setUser: (user: User) => void;
+  /** Refetch /me from the server and refresh the cached user. */
+  refreshUser: () => Promise<void>;
+  /** Replace the stored token (e.g. after an email change re-emits one). */
+  setToken: (token: string) => void;
 }
 
 const AuthContext = createContext<AuthContextType | null>(null);
@@ -86,9 +94,34 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setUser(null);
   }, []);
 
+  const refreshUser = useCallback(async () => {
+    if (!token) return;
+    try {
+      const res = (await api.getMe(token)) as { data: User };
+      setUser(res.data);
+    } catch (err) {
+      console.error("Failed to refresh user:", err);
+    }
+  }, [token]);
+
+  const persistToken = useCallback((next: string) => {
+    localStorage.setItem("ss_token", next);
+    setToken(next);
+  }, []);
+
   return (
     <AuthContext.Provider
-      value={{ user, token, loading, login, register, logout }}
+      value={{
+        user,
+        token,
+        loading,
+        login,
+        register,
+        logout,
+        setUser,
+        refreshUser,
+        setToken: persistToken,
+      }}
     >
       {children}
     </AuthContext.Provider>

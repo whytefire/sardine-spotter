@@ -49,6 +49,28 @@ export const api = {
   getMe: (token: string) =>
     apiFetch("/api/auth/me", { token }),
 
+  updateProfile: (
+    token: string,
+    data: { nickname?: string; avatarUrl?: string | null }
+  ) =>
+    apiFetch<ApiEnvelope<{ id: number; email: string; nickname: string; avatarUrl: string | null; role: string; radius: number }>>(
+      "/api/auth/profile",
+      { method: "PUT", token, body: JSON.stringify(data) }
+    ),
+
+  updateEmail: (token: string, email: string, password: string) =>
+    apiFetch<ApiEnvelope<{ token: string; user: { id: number; email: string; nickname: string; avatarUrl: string | null; role: string; radius: number } }>>(
+      "/api/auth/email",
+      { method: "PUT", token, body: JSON.stringify({ email, password }) }
+    ),
+
+  updatePassword: (token: string, currentPassword: string, newPassword: string) =>
+    apiFetch<ApiEnvelope<null>>("/api/auth/password", {
+      method: "PUT",
+      token,
+      body: JSON.stringify({ currentPassword, newPassword }),
+    }),
+
   // Sightings — token is optional so the server can compute `likedByMe` for logged-in viewers
   getSightings: (
     params?: { lat?: number; lng?: number; radius?: number; page?: number },
@@ -154,6 +176,24 @@ export const api = {
 
     const data = await res.json();
     if (!res.ok) throw new Error(data.error || "Upload failed");
+    return data;
+  },
+
+  uploadAvatar: async (
+    token: string,
+    file: File
+  ): Promise<ApiEnvelope<{ avatarUrl: string; filename: string }>> => {
+    const formData = new FormData();
+    formData.append("avatar", file);
+
+    const res = await fetch(`${API_BASE}/api/upload/avatar`, {
+      method: "POST",
+      headers: { Authorization: `Bearer ${token}` },
+      body: formData,
+    });
+
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || "Avatar upload failed");
     return data;
   },
 };

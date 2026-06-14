@@ -12,6 +12,7 @@ import {
   Loader2,
   AlertTriangle,
 } from "lucide-react";
+import Link from "next/link";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/lib/auth-context";
 import { useRouter } from "next/navigation";
@@ -21,6 +22,7 @@ import {
   subscribeToPush,
   unsubscribeFromPush,
 } from "@/lib/push";
+import { Avatar } from "@/components/ui/avatar";
 
 type PushState =
   | "checking"
@@ -135,11 +137,13 @@ export default function SettingsPage() {
       {/* Profile card */}
       <div className="rounded-2xl border border-deep-200 dark:border-deep-700 bg-white dark:bg-deep-800 p-5 mb-4 shadow-sm">
         <div className="flex items-center gap-4">
-          <div className="avatar-ring shrink-0">
-            <div className="w-14 h-14 rounded-full bg-gradient-to-br from-ocean-400 to-teal-500 flex items-center justify-center text-white font-bold text-xl">
-              {user?.nickname?.[0]?.toUpperCase() ?? "U"}
-            </div>
-          </div>
+          <Avatar
+            nickname={user?.nickname ?? "U"}
+            avatarUrl={user?.avatarUrl}
+            size="lg"
+            ring
+            gradient="from-ocean-400 to-teal-500"
+          />
           <div className="flex-1 min-w-0">
             <h2 className="font-bold text-deep-950 dark:text-white text-lg">
               {user?.nickname ?? "User"}
@@ -148,9 +152,12 @@ export default function SettingsPage() {
               {user?.email ?? "user@sardinespotter.com"}
             </p>
           </div>
-          <button className="px-4 py-2 rounded-xl text-sm font-semibold bg-deep-100 dark:bg-deep-700 text-deep-700 dark:text-white hover:bg-deep-200 dark:hover:bg-deep-600 transition-colors">
+          <Link
+            href="/app/account"
+            className="px-4 py-2 rounded-xl text-sm font-semibold bg-deep-100 dark:bg-deep-700 text-deep-700 dark:text-white hover:bg-deep-200 dark:hover:bg-deep-600 transition-colors"
+          >
             Edit
-          </button>
+          </Link>
         </div>
       </div>
 
@@ -176,19 +183,23 @@ export default function SettingsPage() {
       )}
 
       {/* Account settings */}
-      <div className="rounded-2xl border border-deep-200 dark:border-deep-700 bg-white dark:bg-deep-800 divide-y divide-deep-100 dark:divide-deep-700 mb-4 shadow-sm">
-        <SettingRow
-          icon={Shield}
-          label="Privacy & Security"
-          description="Password, data, and permissions"
-          chevron
-        />
-        <SettingRow
-          icon={User}
-          label="Account"
-          description="Email, nickname, and profile picture"
-          chevron
-        />
+      <div className="rounded-2xl border border-deep-200 dark:border-deep-700 bg-white dark:bg-deep-800 divide-y divide-deep-100 dark:divide-deep-700 mb-4 shadow-sm overflow-hidden">
+        <Link href="/app/account" className="block hover:bg-deep-50 dark:hover:bg-deep-750 transition-colors">
+          <SettingRow
+            icon={User}
+            label="Account"
+            description="Nickname, email, and profile picture"
+            chevron
+          />
+        </Link>
+        <Link href="/app/account" className="block hover:bg-deep-50 dark:hover:bg-deep-750 transition-colors">
+          <SettingRow
+            icon={Shield}
+            label="Password & Security"
+            description="Change your password"
+            chevron
+          />
+        </Link>
       </div>
 
       {/* Dark mode toggle */}

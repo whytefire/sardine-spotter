@@ -18,6 +18,7 @@ import {
   Moon,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { Avatar } from "@/components/ui/avatar";
 import { motion, AnimatePresence } from "framer-motion";
 import { useAuth } from "@/lib/auth-context";
 import { useTheme } from "next-themes";
@@ -133,11 +134,13 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
         {/* User section */}
         <div className="p-3 border-t border-white/10">
           <div className="flex items-center gap-3 px-3 py-2.5 mb-1">
-            <div className="avatar-ring">
-              <div className="w-8 h-8 rounded-full bg-gradient-to-br from-ocean-400 to-teal-500 flex items-center justify-center text-white font-bold text-sm">
-                {user.nickname[0].toUpperCase()}
-              </div>
-            </div>
+            <Avatar
+              nickname={user.nickname}
+              avatarUrl={user.avatarUrl}
+              size="sm"
+              ring
+              gradient="from-ocean-400 to-teal-500"
+            />
             <div className="flex-1 min-w-0">
               <p className="text-sm font-semibold text-white truncate">
                 {user.nickname}
