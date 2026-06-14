@@ -39,6 +39,8 @@ export function SightingDetailModal({
   const [loading, setLoading] = useState(false);
   const [posting, setPosting] = useState(false);
   const [liked, setLiked] = useState(false);
+  const [likeCount, setLikeCount] = useState(0);
+  const [likeBusy, setLikeBusy] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const commentsEndRef = useRef<HTMLDivElement | null>(null);
 
@@ -59,10 +61,34 @@ export function SightingDetailModal({
     if (isOpen && sighting) {
       setComments([]);
       setCommentText("");
-      setLiked(false);
+      setLiked(sighting.likedByMe);
+      setLikeCount(sighting.likeCount);
       loadComments(sighting.id);
     }
   }, [isOpen, sighting, loadComments]);
+
+  const handleToggleLike = async () => {
+    if (!token || !sighting || likeBusy) return;
+    const next = !liked;
+    // Optimistic — flip locally first, only roll back on failure
+    setLiked(next);
+    setLikeCount((c) => Math.max(0, c + (next ? 1 : -1)));
+    setLikeBusy(true);
+    try {
+      const res = next
+        ? await api.likeSighting(token, sighting.id)
+        : await api.unlikeSighting(token, sighting.id);
+      // Server is source of truth — sync the canonical count
+      setLikeCount(res.data.likeCount);
+      setLiked(res.data.likedByMe);
+    } catch (err) {
+      console.error("Failed to toggle like:", err);
+      setLiked(!next);
+      setLikeCount((c) => Math.max(0, c + (next ? -1 : 1)));
+    } finally {
+      setLikeBusy(false);
+    }
+  };
 
   useEffect(() => {
     if (!isOpen) return;
@@ -232,11 +258,12 @@ export function SightingDetailModal({
 
                   <div className="flex items-center gap-4 pt-2 border-t border-deep-100 dark:border-deep-800">
                     <button
-                      onClick={() => setLiked(!liked)}
+                      onClick={handleToggleLike}
+                      disabled={!token || likeBusy}
                       aria-pressed={liked}
                       aria-label={liked ? "Unlike sighting" : "Like sighting"}
                       className={cn(
-                        "flex items-center gap-1.5 text-sm font-semibold transition-all px-2 py-2 rounded-lg min-h-[44px]",
+                        "flex items-center gap-1.5 text-sm font-semibold transition-all px-2 py-2 rounded-lg min-h-[44px] disabled:opacity-50 disabled:cursor-not-allowed",
                         liked
                           ? "text-coral-500 dark:text-coral-400"
                           : "text-deep-600 dark:text-deep-300 hover:text-coral-500 dark:hover:text-coral-400"
@@ -245,7 +272,10 @@ export function SightingDetailModal({
                       <Heart
                         className={cn("w-5 h-5 transition-all", liked && "fill-current scale-110")}
                       />
-                      <span>{liked ? "Liked" : "Like"}</span>
+                      <span className="tabular-nums">
+                        {likeCount > 0 ? likeCount : ""}{" "}
+                        {liked ? "Liked" : "Like"}
+                      </span>
                     </button>
                     <span className="text-sm text-deep-500 dark:text-deep-400 font-medium">
                       {comments.length} {comments.length === 1 ? "comment" : "comments"}

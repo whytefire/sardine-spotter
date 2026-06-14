@@ -11,6 +11,9 @@ export interface Sighting {
   createdAt: string;
   distanceKm?: number | null;
   commentCount: number;
+  likeCount: number;
+  /** True when the CURRENT viewer has liked this sighting. False for guests. */
+  likedByMe: boolean;
 }
 
 export interface Comment {
@@ -23,7 +26,7 @@ export interface Comment {
   createdAt: string;
 }
 
-export type NotificationKind = "sighting" | "comment";
+export type NotificationKind = "sighting" | "comment" | "like";
 
 export interface NotificationActor {
   id: number;

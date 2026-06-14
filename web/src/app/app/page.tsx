@@ -116,10 +116,31 @@ function SightingCard({
           className="mt-4 pt-3.5 border-t border-deep-100 dark:border-deep-800 flex items-center justify-between"
           onClick={(e) => e.stopPropagation()}
         >
-          <div className="flex items-center gap-5">
+          <div className="flex items-center gap-4">
+            <div
+              className={cn(
+                "flex items-center gap-1.5 text-sm",
+                sighting.likedByMe
+                  ? "text-coral-500 dark:text-coral-400"
+                  : "text-deep-600 dark:text-deep-300"
+              )}
+            >
+              <Heart
+                className={cn(
+                  "w-4 h-4",
+                  sighting.likedByMe && "fill-current"
+                )}
+              />
+              <span className="font-semibold tabular-nums">
+                {sighting.likeCount}
+              </span>
+              <span className="text-deep-500 dark:text-deep-400">
+                {sighting.likeCount === 1 ? "like" : "likes"}
+              </span>
+            </div>
             <div className="flex items-center gap-1.5 text-deep-600 dark:text-deep-300 text-sm">
               <Waves className="w-4 h-4" />
-              <span className="font-semibold">{sighting.commentCount}</span>
+              <span className="font-semibold tabular-nums">{sighting.commentCount}</span>
               <span className="text-deep-500 dark:text-deep-400">
                 {sighting.commentCount === 1 ? "comment" : "comments"}
               </span>
@@ -136,7 +157,7 @@ function SightingCard({
 }
 
 export default function FeedPage() {
-  const { user } = useAuth();
+  const { user, token } = useAuth();
   const [sightings, setSightings] = useState<Sighting[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -171,7 +192,7 @@ export default function FeedPage() {
         params.lng = coords.lng;
         params.radius = user?.radius ?? 50;
       }
-      const res = await api.getSightings(params);
+      const res = await api.getSightings(params, token ?? undefined);
       setSightings(res.data || []);
     } catch (err) {
       const message =
@@ -180,7 +201,7 @@ export default function FeedPage() {
     } finally {
       setLoading(false);
     }
-  }, [coords, user?.radius]);
+  }, [coords, user?.radius, token]);
 
   useEffect(() => {
     loadSightings();

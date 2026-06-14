@@ -10,6 +10,7 @@ import {
   RefreshCw,
   Fish,
   MessageCircle,
+  Heart,
 } from "lucide-react";
 import { cn, timeAgo } from "@/lib/utils";
 import { motion } from "framer-motion";
@@ -34,6 +35,20 @@ function notificationCopy(n: Notification) {
       ),
       detail: n.comment?.text ?? n.sighting.description,
       Icon: MessageCircle,
+      accent: "comment" as const,
+    };
+  }
+
+  if (n.kind === "like") {
+    return {
+      headline: (
+        <>
+          <span className="font-semibold">{actorName}</span> liked your sighting
+        </>
+      ),
+      detail: n.sighting.description,
+      Icon: Heart,
+      accent: "like" as const,
     };
   }
 
@@ -45,6 +60,7 @@ function notificationCopy(n: Notification) {
     ),
     detail: n.sighting.description,
     Icon: Fish,
+    accent: "sighting" as const,
   };
 }
 
@@ -99,7 +115,7 @@ export default function AlertsPage() {
     if (!token) return;
     setOpeningId(notification.id);
     try {
-      const res = await api.getSighting(notification.sighting.id);
+      const res = await api.getSighting(notification.sighting.id, token);
       setActiveSighting(res.data);
       setModalOpen(true);
       if (!notification.read) {
@@ -185,12 +201,21 @@ export default function AlertsPage() {
       {!loading && !error && notifications.length > 0 && (
         <div className="space-y-2">
           {notifications.map((notification, index) => {
-            const { headline, detail, Icon } = notificationCopy(notification);
+            const { headline, detail, Icon, accent } = notificationCopy(notification);
             const actorInitial =
               notification.actor?.nickname?.[0]?.toUpperCase() ??
               notification.sighting.nickname?.[0]?.toUpperCase() ??
               "?";
-            const isComment = notification.kind === "comment";
+            const isComment = accent === "comment";
+            const isLike = accent === "like";
+            const accentBg =
+              accent === "sighting"
+                ? "bg-gradient-to-br from-ocean-500 to-ocean-600"
+                : accent === "comment"
+                ? "bg-gradient-to-br from-coral-500 to-coral-600"
+                : "bg-gradient-to-br from-coral-400 to-sunset-500";
+            const badgeBg =
+              accent === "sighting" ? "bg-ocean-500" : "bg-coral-500";
 
             return (
               <motion.div
@@ -220,9 +245,7 @@ export default function AlertsPage() {
                       <div
                         className={cn(
                           "w-10 h-10 rounded-full flex items-center justify-center text-white font-bold text-sm",
-                          isComment
-                            ? "bg-gradient-to-br from-coral-500 to-coral-600"
-                            : "bg-gradient-to-br from-ocean-500 to-ocean-600"
+                          accentBg
                         )}
                       >
                         {actorInitial}
@@ -231,11 +254,16 @@ export default function AlertsPage() {
                     <span
                       className={cn(
                         "absolute -bottom-0.5 -right-0.5 w-5 h-5 rounded-full flex items-center justify-center border-2 border-white dark:border-deep-850",
-                        isComment ? "bg-coral-500" : "bg-ocean-500"
+                        badgeBg
                       )}
                       aria-hidden="true"
                     >
-                      <Icon className="w-2.5 h-2.5 text-white" />
+                      <Icon
+                        className={cn(
+                          "w-2.5 h-2.5 text-white",
+                          isLike && "fill-current"
+                        )}
+                      />
                     </span>
                     {!notification.read && (
                       <span className="absolute -top-0.5 -right-0.5 w-3 h-3 rounded-full bg-coral-500 border-2 border-ocean-50 dark:border-deep-850" />

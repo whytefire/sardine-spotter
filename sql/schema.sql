@@ -98,6 +98,24 @@ CREATE NONCLUSTERED INDEX IX_Notifications_UserKind
 GO
 
 -- =============================================
+-- SIGHTING LIKES (one row per user per sighting)
+-- =============================================
+IF NOT EXISTS (SELECT * FROM sys.tables WHERE name = 'SightingLikes')
+CREATE TABLE SightingLikes (
+    id              INT IDENTITY(1,1) PRIMARY KEY,
+    sighting_id     INT             NOT NULL REFERENCES Sightings(id) ON DELETE CASCADE,
+    user_id         INT             NOT NULL REFERENCES Users(id) ON DELETE CASCADE,
+    created_at      DATETIME        NOT NULL DEFAULT GETDATE(),
+    CONSTRAINT UQ_SightingLikes_Sighting_User UNIQUE (sighting_id, user_id)
+);
+GO
+
+CREATE NONCLUSTERED INDEX IX_SightingLikes_Sighting
+    ON SightingLikes (sighting_id)
+    INCLUDE (user_id);
+GO
+
+-- =============================================
 -- PUSH SUBSCRIPTIONS (one row per device per user)
 -- =============================================
 IF NOT EXISTS (SELECT * FROM sys.tables WHERE name = 'PushSubscriptions')

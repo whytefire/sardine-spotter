@@ -1,7 +1,6 @@
-const CACHE_NAME = "sardine-spotter-v3.0.0";
-const PRECACHE_URLS = [
-  "/manifest.json",
-];
+// Bumped to force re-install when the fetch handler changes.
+const CACHE_NAME = "sardine-spotter-v4.0.0";
+const PRECACHE_URLS = ["/manifest.json"];
 
 self.addEventListener("install", (event) => {
   event.waitUntil(
@@ -23,32 +22,53 @@ self.addEventListener("activate", (event) => {
   self.clients.claim();
 });
 
+// Only intercept HTML navigations (top-level page loads), and ONLY in production.
+// In dev, Turbopack constantly creates/aborts script and HMR fetches; intercepting
+// them turns aborted requests into hung pages. Everything that isn't a navigation
+// is left to the browser entirely (return without calling respondWith).
 self.addEventListener("fetch", (event) => {
   const { request } = event;
+
+  // Never touch:
+  //   - non-GET requests
+  //   - API calls (always live)
+  //   - Next.js internals (/_next/*, hot-reloader, RSC, source maps, etc.)
+  //   - anything that isn't a top-level navigation
+  if (request.method !== "GET") return;
+  if (request.mode !== "navigate") return;
+
   const url = new URL(request.url);
+  if (url.pathname.startsWith("/api/")) return;
+  if (url.pathname.startsWith("/_next/")) return;
 
-  if (request.method !== "GET" || url.pathname.startsWith("/api/")) {
-    return;
-  }
+  // Don't intercept on localhost dev servers — HMR is more important than
+  // offline support while iterating, and Next dev breaks if the SW caches
+  // a stale HTML document.
+  if (url.hostname === "localhost" || url.hostname === "127.0.0.1") return;
 
-  // Network-first: always try fresh content, fall back to cache only if offline
+  // Production: network-first with cache fallback for navigation requests
   event.respondWith(
     fetch(request)
       .then((response) => {
-        if (response.ok) {
+        if (response && response.ok) {
           const clone = response.clone();
           caches.open(CACHE_NAME).then((cache) => cache.put(request, clone));
         }
         return response;
       })
-      .catch(() => caches.match(request))
+      .catch(() => caches.match(request).then((cached) => cached || Response.error()))
   );
 });
 
 self.addEventListener("push", (event) => {
   if (!event.data) return;
 
-  const data = event.data.json();
+  let data = {};
+  try {
+    data = event.data.json();
+  } catch {
+    data = { title: "Sardine Spotter", body: event.data.text() };
+  }
 
   const options = {
     body: data.body || "New sardine sighting near you!",

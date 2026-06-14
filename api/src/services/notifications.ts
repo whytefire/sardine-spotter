@@ -42,6 +42,13 @@ interface CommentInput {
   text: string;
 }
 
+interface LikeInput {
+  sightingId: number;
+  authorId: number;
+  actorUserId: number;
+  actorNickname: string;
+}
+
 /** Send a push notification to all subscriptions for a set of users. */
 async function sendPushToUsers(userIds: number[], payload: PushPayload): Promise<number> {
   if (userIds.length === 0) return 0;
@@ -187,6 +194,48 @@ export async function notifyNewComment(comment: CommentInput): Promise<number> {
     body: comment.text,
     url: `/app?sighting=${comment.sightingId}`,
     tag: `comment-${comment.id}`,
+  });
+}
+
+/**
+ * Fires the first time a given user likes a given sighting. The route already
+ * filters out self-likes and only calls us on a fresh INSERT, so this function
+ * unconditionally notifies the author. We also dedupe at the in-app layer in
+ * case the same liker re-likes after an unlike — only one notification row per
+ * (recipient, sighting, actor, kind='like').
+ */
+export async function notifyNewLike(like: LikeInput): Promise<number> {
+  const pool = await getPool();
+
+  // Idempotent insert: if there's already a 'like' notification from this actor
+  // to this author for this sighting, we skip. Cap at one notification per
+  // unique like pairing — same way Facebook does it.
+  const inserted = await pool
+    .request()
+    .input("authorId", like.authorId)
+    .input("sightingId", like.sightingId)
+    .input("actorId", like.actorUserId)
+    .query(`
+      INSERT INTO Notifications (user_id, sighting_id, kind, actor_id, is_read, created_at)
+      OUTPUT INSERTED.id
+      SELECT @authorId, @sightingId, 'like', @actorId, 0, GETDATE()
+      WHERE NOT EXISTS (
+        SELECT 1 FROM Notifications
+        WHERE user_id = @authorId
+          AND sighting_id = @sightingId
+          AND kind = 'like'
+          AND actor_id = @actorId
+      )
+    `);
+
+  // No fresh row → already notified for this pairing, don't push again.
+  if (inserted.recordset.length === 0) return 0;
+
+  return sendPushToUsers([like.authorId], {
+    title: `${like.actorNickname} liked your sighting`,
+    body: "Tap to view it",
+    url: `/app?sighting=${like.sightingId}`,
+    tag: `like-${like.sightingId}-${like.actorUserId}`,
   });
 }
 

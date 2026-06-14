@@ -49,18 +49,36 @@ export const api = {
   getMe: (token: string) =>
     apiFetch("/api/auth/me", { token }),
 
-  // Sightings
-  getSightings: (params?: { lat?: number; lng?: number; radius?: number; page?: number }) => {
+  // Sightings — token is optional so the server can compute `likedByMe` for logged-in viewers
+  getSightings: (
+    params?: { lat?: number; lng?: number; radius?: number; page?: number },
+    token?: string
+  ) => {
     const query = new URLSearchParams();
     if (params?.lat) query.set("lat", String(params.lat));
     if (params?.lng) query.set("lng", String(params.lng));
     if (params?.radius) query.set("radius", String(params.radius));
     if (params?.page) query.set("page", String(params.page));
-    return apiFetch<ApiEnvelope<Sighting[]>>(`/api/sightings?${query.toString()}`);
+    return apiFetch<ApiEnvelope<Sighting[]>>(
+      `/api/sightings?${query.toString()}`,
+      { token }
+    );
   },
 
-  getSighting: (id: number) =>
-    apiFetch<ApiEnvelope<Sighting>>(`/api/sightings/${id}`),
+  getSighting: (id: number, token?: string) =>
+    apiFetch<ApiEnvelope<Sighting>>(`/api/sightings/${id}`, { token }),
+
+  likeSighting: (token: string, id: number) =>
+    apiFetch<ApiEnvelope<{ likeCount: number; likedByMe: boolean }>>(
+      `/api/sightings/${id}/like`,
+      { method: "POST", token }
+    ),
+
+  unlikeSighting: (token: string, id: number) =>
+    apiFetch<ApiEnvelope<{ likeCount: number; likedByMe: boolean }>>(
+      `/api/sightings/${id}/like`,
+      { method: "DELETE", token }
+    ),
 
   createSighting: (token: string, data: {
     description: string;
