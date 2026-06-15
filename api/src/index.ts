@@ -17,7 +17,27 @@ const app = express();
 const PORT = process.env.PORT || 4000;
 
 app.use(helmet({ crossOriginResourcePolicy: { policy: "cross-origin" } }));
-app.use(cors({ origin: process.env.APP_URL || "http://localhost:3000", credentials: true }));
+
+const allowedOrigins = [
+  "http://localhost:3000",
+  "https://sardinewatch.co.za",
+  "https://www.sardinewatch.co.za",
+  "https://sardinewatch.vercel.app",
+  // Allow all Vercel preview deployment URLs for this project
+  /^https:\/\/sardinewatch[a-z0-9-]*\.vercel\.app$/,
+];
+
+app.use(cors({
+  origin: (origin, callback) => {
+    // Allow requests with no origin (mobile apps, curl, Render health checks)
+    if (!origin) return callback(null, true);
+    const allowed = allowedOrigins.some((o) =>
+      typeof o === "string" ? o === origin : o.test(origin)
+    );
+    callback(allowed ? null : new Error("Not allowed by CORS"), allowed);
+  },
+  credentials: true,
+}));
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
