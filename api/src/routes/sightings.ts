@@ -2,6 +2,8 @@ import { Router, Response } from "express";
 import { authenticate, authenticateOptional, AuthRequest } from "../middleware/auth";
 import { getPool } from "../config/database";
 import { notifyNewSighting, notifyNewLike } from "../services/notifications";
+import { logModeration } from "../services/moderation";
+import { censor } from "../lib/profanity";
 
 const router = Router();
 
@@ -33,7 +35,8 @@ router.get("/", authenticateOptional, async (req: AuthRequest, res: Response) =>
           ) / 1000.0 AS distance_km
         FROM Sightings s
         JOIN Users u ON s.user_id = u.id
-        WHERE s.created_at >= DATEADD(hour, -24, GETDATE())
+        WHERE s.is_active = 1
+          AND s.created_at >= DATEADD(hour, -24, GETDATE())
           AND geography::Point(s.latitude, s.longitude, 4326).STDistance(
             geography::Point(@lat, @lng, 4326)
           ) / 1000.0 <= @radius
@@ -54,13 +57,16 @@ router.get("/", authenticateOptional, async (req: AuthRequest, res: Response) =>
           ) THEN 1 ELSE 0 END AS BIT) AS liked_by_me
         FROM Sightings s
         JOIN Users u ON s.user_id = u.id
-        WHERE s.created_at >= DATEADD(hour, -24, GETDATE())
+        WHERE s.is_active = 1
+          AND s.created_at >= DATEADD(hour, -24, GETDATE())
         ORDER BY s.created_at DESC
         OFFSET @offset ROWS FETCH NEXT @limit ROWS ONLY
       `;
     }
 
     const result = await request.query(query);
+
+    const isAdmin = req.user?.role === "admin";
 
     res.json({
       success: true,
@@ -69,7 +75,7 @@ router.get("/", authenticateOptional, async (req: AuthRequest, res: Response) =>
         userId: row.user_id,
         nickname: row.nickname,
         avatarUrl: row.avatar_url,
-        description: row.description,
+        description: isAdmin ? row.description : censor(row.description as string),
         latitude: row.latitude,
         longitude: row.longitude,
         photoUrl: row.photo_url,
@@ -167,7 +173,7 @@ router.get("/:id", authenticateOptional, async (req: AuthRequest, res: Response)
           ) THEN 1 ELSE 0 END AS BIT) AS liked_by_me
          FROM Sightings s
          JOIN Users u ON s.user_id = u.id
-         WHERE s.id = @id`
+         WHERE s.id = @id AND s.is_active = 1`
       );
 
     if (result.recordset.length === 0) {
@@ -176,6 +182,7 @@ router.get("/:id", authenticateOptional, async (req: AuthRequest, res: Response)
     }
 
     const row = result.recordset[0];
+    const isAdmin = req.user?.role === "admin";
     res.json({
       success: true,
       data: {
@@ -183,7 +190,7 @@ router.get("/:id", authenticateOptional, async (req: AuthRequest, res: Response)
         userId: row.user_id,
         nickname: row.nickname,
         avatarUrl: row.avatar_url,
-        description: row.description,
+        description: isAdmin ? row.description : censor(row.description as string),
         latitude: row.latitude,
         longitude: row.longitude,
         photoUrl: row.photo_url,
@@ -307,16 +314,41 @@ router.delete("/:id/like", authenticate, async (req: AuthRequest, res: Response)
   }
 });
 
+/**
+ * Remove a sighting. Two different behaviours depending on who calls it:
+ *
+ *   Owner (reporter)
+ *     → Hard DELETE. It's their content, POPIA gives them the right to
+ *       fully erase it. No audit log entry needed (self-action).
+ *
+ *   Admin moderating someone else's content
+ *     → Soft-delete: sets is_active = 0 so the row is preserved as
+ *       evidence (useful for SAHRC / Equality Court matters) but the
+ *       sighting disappears from the public feed and map immediately.
+ *     → Writes a ModerationLog row containing a full snapshot of the
+ *       sighting at the time of deactivation, plus the admin's reason.
+ *     → The sighting can be reinstated via PUT /api/sightings/:id/reinstate.
+ *
+ * Body (optional):
+ *   { reason?: string }   moderator's note, stored on the audit log
+ */
 router.delete("/:id", authenticate, async (req: AuthRequest, res: Response) => {
   try {
+    const sightingId = Number(req.params.id);
+    if (!Number.isFinite(sightingId)) {
+      res.status(400).json({ error: "Invalid sighting id" });
+      return;
+    }
+
     const pool = await getPool();
 
     const check = await pool
       .request()
-      .input("id", Number(req.params.id))
-      .input("userId", req.user!.userId)
+      .input("id", sightingId)
       .query(
-        `SELECT id, user_id FROM Sightings WHERE id = @id`
+        `SELECT id, user_id, description, category, latitude, longitude,
+                photo_url, is_active, created_at
+           FROM Sightings WHERE id = @id`
       );
 
     if (check.recordset.length === 0) {
@@ -324,20 +356,74 @@ router.delete("/:id", authenticate, async (req: AuthRequest, res: Response) => {
       return;
     }
 
-    if (check.recordset[0].user_id !== req.user!.userId && req.user!.role !== "god" && req.user!.role !== "admin") {
+    const row = check.recordset[0];
+    const isOwner = row.user_id === req.user!.userId;
+    const isModerator = req.user!.role === "admin";
+
+    if (!isOwner && !isModerator) {
       res.status(403).json({ error: "Not authorized to delete this sighting" });
       return;
     }
 
-    await pool
-      .request()
-      .input("id", Number(req.params.id))
-      .query("DELETE FROM Sightings WHERE id = @id");
+    if (isOwner && !isModerator) {
+      // Owner removing their own content — hard delete
+      await pool
+        .request()
+        .input("id", sightingId)
+        .query("DELETE FROM Sightings WHERE id = @id");
+    } else {
+      // Admin moderating someone else's content — soft deactivate
+      await pool
+        .request()
+        .input("id", sightingId)
+        .query("UPDATE Sightings SET is_active = 0 WHERE id = @id");
+
+      logModeration({
+        moderatorId: req.user!.userId,
+        moderatorRole: req.user!.role,
+        action: "deactivate_sighting",
+        targetKind: "sighting",
+        targetId: row.id,
+        targetUserId: row.user_id,
+        targetSnapshot: {
+          description: row.description,
+          category: row.category,
+          latitude: row.latitude,
+          longitude: row.longitude,
+          photoUrl: row.photo_url,
+          createdAt: row.created_at,
+        },
+        reason: typeof req.body?.reason === "string" ? req.body.reason : null,
+      }).catch(() => {});
+    }
 
     res.json({ success: true });
   } catch (err) {
     console.error("Delete sighting error:", err);
     res.status(500).json({ error: "Failed to delete sighting" });
+  }
+});
+
+/**
+ * Reinstate a sighting that was soft-deactivated by a moderator.
+ * Admin only — sets is_active back to 1.
+ */
+router.put("/:id/reinstate", authenticate, async (req: AuthRequest, res: Response) => {
+  try {
+    if (req.user!.role !== "admin") {
+      res.status(403).json({ error: "Admin access required" });
+      return;
+    }
+    const sightingId = Number(req.params.id);
+    const pool = await getPool();
+    await pool
+      .request()
+      .input("id", sightingId)
+      .query("UPDATE Sightings SET is_active = 1 WHERE id = @id");
+    res.json({ success: true });
+  } catch (err) {
+    console.error("Reinstate sighting error:", err);
+    res.status(500).json({ error: "Failed to reinstate sighting" });
   }
 });
 

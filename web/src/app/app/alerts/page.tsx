@@ -18,6 +18,18 @@ import { useAuth } from "@/lib/auth-context";
 import { api } from "@/lib/api";
 import type { Notification, Sighting } from "@/lib/types";
 import { SightingDetailModal } from "@/components/app/SightingDetailModal";
+import { Avatar } from "@/components/ui/avatar";
+
+/**
+ * Tells AppShell that the unread count may have changed so it can refresh
+ * the sidebar / mobile-bell badge without waiting for the next 30s poll.
+ * Keep the event name identical to the listener in AppShell.tsx.
+ */
+function emitNotificationsUpdated() {
+  if (typeof window !== "undefined") {
+    window.dispatchEvent(new Event("ss:notifications-updated"));
+  }
+}
 
 function notificationCopy(n: Notification) {
   const actorName = n.actor?.nickname ?? "Someone";
@@ -105,6 +117,7 @@ export default function AlertsPage() {
     setNotifications((prev) => prev.map((n) => ({ ...n, read: true })));
     try {
       await api.markAllRead(token);
+      emitNotificationsUpdated();
     } catch (err) {
       console.error("Failed to mark all read:", err);
       load(false);
@@ -122,9 +135,10 @@ export default function AlertsPage() {
         setNotifications((prev) =>
           prev.map((n) => (n.id === notification.id ? { ...n, read: true } : n))
         );
-        api.markRead(token, notification.id).catch((err) =>
-          console.error("Failed to mark read:", err)
-        );
+        api
+          .markRead(token, notification.id)
+          .then(() => emitNotificationsUpdated())
+          .catch((err) => console.error("Failed to mark read:", err));
       }
     } catch (err) {
       console.error("Failed to open sighting:", err);
@@ -202,18 +216,22 @@ export default function AlertsPage() {
         <div className="space-y-2">
           {notifications.map((notification, index) => {
             const { headline, detail, Icon, accent } = notificationCopy(notification);
-            const actorInitial =
-              notification.actor?.nickname?.[0]?.toUpperCase() ??
-              notification.sighting.nickname?.[0]?.toUpperCase() ??
-              "?";
+            // Prefer the ACTOR's identity (the person who did the action) and
+            // fall back to the sighting author for legacy rows where actor is null.
+            const actorNickname =
+              notification.actor?.nickname ?? notification.sighting.nickname ?? "?";
+            const actorAvatarUrl =
+              notification.actor?.avatarUrl ?? notification.sighting.avatarUrl ?? null;
             const isComment = accent === "comment";
             const isLike = accent === "like";
-            const accentBg =
+            // Gradient used by the Avatar component when no photo is uploaded —
+            // colour-coded by the kind of notification so initials still feel themed.
+            const accentGradient =
               accent === "sighting"
-                ? "bg-gradient-to-br from-ocean-500 to-ocean-600"
+                ? "from-ocean-500 to-ocean-600"
                 : accent === "comment"
-                ? "bg-gradient-to-br from-coral-500 to-coral-600"
-                : "bg-gradient-to-br from-coral-400 to-sunset-500";
+                ? "from-coral-500 to-coral-600"
+                : "from-coral-400 to-sunset-500";
             const badgeBg =
               accent === "sighting" ? "bg-ocean-500" : "bg-coral-500";
 
@@ -241,16 +259,13 @@ export default function AlertsPage() {
                 >
                   {/* Avatar with kind badge */}
                   <div className="relative flex-shrink-0">
-                    <div className="avatar-ring">
-                      <div
-                        className={cn(
-                          "w-10 h-10 rounded-full flex items-center justify-center text-white font-bold text-sm",
-                          accentBg
-                        )}
-                      >
-                        {actorInitial}
-                      </div>
-                    </div>
+                    <Avatar
+                      nickname={actorNickname}
+                      avatarUrl={actorAvatarUrl}
+                      size="md"
+                      ring
+                      gradient={accentGradient}
+                    />
                     <span
                       className={cn(
                         "absolute -bottom-0.5 -right-0.5 w-5 h-5 rounded-full flex items-center justify-center border-2 border-white dark:border-deep-850",

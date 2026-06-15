@@ -1,5 +1,6 @@
-import { Fish, Heart } from "lucide-react";
+import { Heart } from "lucide-react";
 import Link from "next/link";
+import { Logo } from "@/components/ui/logo";
 
 export default function Footer() {
   return (
@@ -12,11 +13,9 @@ export default function Footer() {
           {/* Brand */}
           <div className="md:col-span-2">
             <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-ocean-500 to-ocean-700 flex items-center justify-center shadow-lg shadow-ocean-500/25">
-                <Fish className="w-6 h-6 text-white" />
-              </div>
+              <Logo size="lg" className="w-10 h-10" />
               <span className="text-xl font-display font-bold">
-                Sardine Spotter
+                SardineWatch
               </span>
             </div>
             <p className="mt-4 text-ocean-200/50 max-w-md leading-relaxed">
@@ -33,7 +32,7 @@ export default function Footer() {
             </h3>
             <ul className="space-y-3">
               {[
-                { label: "Live Map", href: "/map" },
+                { label: "Live Map", href: "/app/map" },
                 { label: "Sign Up", href: "/register" },
                 { label: "Log In", href: "/login" },
                 { label: "How It Works", href: "/#how-it-works" },
@@ -57,10 +56,9 @@ export default function Footer() {
             </h3>
             <ul className="space-y-3">
               {[
-                { label: "About Us", href: "/about" },
-                { label: "Contact", href: "/contact" },
                 { label: "Privacy Policy", href: "/privacy" },
                 { label: "Terms of Use", href: "/terms" },
+                { label: "Cookie Policy", href: "/cookies" },
               ].map((link) => (
                 <li key={link.href}>
                   <Link
@@ -78,7 +76,7 @@ export default function Footer() {
         {/* Bottom bar */}
         <div className="mt-16 pt-8 border-t border-white/10 flex flex-col sm:flex-row items-center justify-between gap-4">
           <p className="text-ocean-200/40 text-sm">
-            &copy; {new Date().getFullYear()} Sardine Spotter. All rights reserved.
+            &copy; {new Date().getFullYear()} SardineWatch. All rights reserved.
           </p>
           <p className="text-ocean-200/40 text-sm flex items-center gap-1.5">
             Made with{" "}

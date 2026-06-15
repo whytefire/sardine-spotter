@@ -2,8 +2,9 @@
 
 import { useState, useEffect } from "react";
 import Link from "next/link";
-import { Fish, Menu, X, Sun, Moon } from "lucide-react";
+import { Menu, X, Sun, Moon } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { Logo } from "@/components/ui/logo";
 import { motion, AnimatePresence } from "framer-motion";
 import { useTheme } from "next-themes";
 
@@ -28,11 +29,9 @@ export default function Navbar() {
           <div className="flex items-center justify-between h-16">
             {/* Logo */}
             <Link href="/" className="flex items-center gap-2.5 group">
-              <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-ocean-500 to-ocean-700 flex items-center justify-center group-hover:from-ocean-400 group-hover:to-ocean-600 transition-all shadow-lg shadow-ocean-500/25">
-                <Fish className="w-5 h-5 text-white" />
-              </div>
+              <Logo size="md" className="group-hover:shadow-ocean-500/40 transition-shadow" />
               <span className="text-lg font-display font-bold text-deep-950 dark:text-white tracking-tight">
-                Sardine Spotter
+                SardineWatch
               </span>
             </Link>
 

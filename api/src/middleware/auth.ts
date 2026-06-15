@@ -1,5 +1,6 @@
 import { Request, Response, NextFunction } from "express";
 import jwt from "jsonwebtoken";
+import { getPool } from "../config/database";
 
 export interface AuthPayload {
   userId: number;
@@ -11,11 +12,11 @@ export interface AuthRequest extends Request {
   user?: AuthPayload;
 }
 
-export function authenticate(
+export async function authenticate(
   req: AuthRequest,
   res: Response,
   next: NextFunction
-): void {
+): Promise<void> {
   const header = req.headers.authorization;
 
   if (!header || !header.startsWith("Bearer ")) {
@@ -25,16 +26,42 @@ export function authenticate(
 
   const token = header.split(" ")[1];
 
+  let payload: AuthPayload;
   try {
-    const payload = jwt.verify(
+    payload = jwt.verify(
       token,
       process.env.JWT_SECRET || "fallback-secret"
     ) as AuthPayload;
-    req.user = payload;
-    next();
   } catch {
     res.status(401).json({ error: "Invalid or expired token" });
+    return;
   }
+
+  // Check the user is still active on every authenticated request so a ban
+  // takes effect immediately — the banned user's next API call gets a 403
+  // and the frontend clears their session and redirects to login.
+  try {
+    const pool = await getPool();
+    const result = await pool
+      .request()
+      .input("id", payload.userId)
+      .query("SELECT is_active, ban_reason FROM Users WHERE id = @id");
+
+    const row = result.recordset[0];
+    if (!row || !row.is_active) {
+      res.status(403).json({
+        error: "banned",
+        banReason: row?.ban_reason || "Your account has been suspended.",
+      });
+      return;
+    }
+  } catch {
+    // If the DB check fails for any reason, still allow the request through
+    // rather than locking everyone out during a connectivity blip.
+  }
+
+  req.user = payload;
+  next();
 }
 
 /**

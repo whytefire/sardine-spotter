@@ -14,7 +14,7 @@ export interface User {
   id: number;
   email: string;
   nickname: string;
-  role: "god" | "admin" | "user";
+  role: "admin" | "user";
   radius: number;
   avatarUrl?: string | null;
   createdAt?: string;

@@ -3,8 +3,9 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { Fish, Mail, Lock, Eye, EyeOff, User, ArrowRight, Check, AlertCircle } from "lucide-react";
+import { Mail, Lock, Eye, EyeOff, User, ArrowRight, Check, AlertCircle } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { Logo } from "@/components/ui/logo";
 import { motion } from "framer-motion";
 import { useAuth } from "@/lib/auth-context";
 
@@ -55,11 +56,9 @@ export default function RegisterPage() {
       >
         <div className="text-center mb-10">
           <Link href="/" className="inline-flex items-center gap-3 group">
-            <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-ocean-500 to-teal-500 flex items-center justify-center shadow-lg shadow-ocean-500/30 group-hover:shadow-ocean-500/50 transition-shadow">
-              <Fish className="w-6 h-6 text-white" />
-            </div>
+            <Logo size="lg" className="group-hover:shadow-ocean-500/50 transition-shadow" />
             <span className="text-2xl font-display font-bold text-white tracking-tight">
-              Sardine Spotter
+              SardineWatch
             </span>
           </Link>
         </div>

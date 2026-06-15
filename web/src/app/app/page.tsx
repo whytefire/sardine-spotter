@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import {
   Fish,
   MapPin,
@@ -21,7 +21,9 @@ import { api } from "@/lib/api";
 import { photoSrc } from "@/lib/images";
 import { useAuth } from "@/lib/auth-context";
 import { SightingDetailModal } from "@/components/app/SightingDetailModal";
+import { ModerationMenu } from "@/components/app/ModerationMenu";
 import { SightingCardSkeleton } from "@/components/ui/skeleton";
+import { Avatar } from "@/components/ui/avatar";
 import type { Sighting } from "@/lib/types";
 
 const avatarColors = [
@@ -35,14 +37,18 @@ function SightingCard({
   sighting,
   index,
   token,
+  canModerate,
   onOpen,
   onLikeChange,
+  onDeleted,
 }: {
   sighting: Sighting;
   index: number;
   token: string | null;
+  canModerate: boolean;
   onOpen: () => void;
   onLikeChange: (id: number, likeCount: number, likedByMe: boolean) => void;
+  onDeleted: (id: number) => void;
 }) {
   const photo = photoSrc(sighting.photoUrl);
   const [likeBusy, setLikeBusy] = useState(false);
@@ -82,6 +88,24 @@ function SightingCard({
       {/* Teal accent stripe */}
       <div className="absolute left-0 top-0 bottom-0 w-1 bg-gradient-to-b from-ocean-400 to-ocean-600" aria-hidden="true" />
 
+      {/* Moderation kebab — sits OUTSIDE the open-button so its own button
+          doesn't violate the HTML "no nested buttons" rule. Only renders
+          for admin users. */}
+      {canModerate && token && (
+        <div className="absolute top-4 right-4 z-10">
+          <ModerationMenu
+            canModerate
+            targetLabel="this sighting"
+            authorNickname={sighting.nickname}
+            variant="ghost"
+            onDelete={async (reason) => {
+              await api.deleteSighting(token, sighting.id, reason);
+              onDeleted(sighting.id);
+            }}
+          />
+        </div>
+      )}
+
       {/* Clickable upper region — opens the modal. The action bar below is
           rendered OUTSIDE this button so the heart can be its own real button.
           (HTML doesn't allow buttons inside buttons.) */}
@@ -92,18 +116,19 @@ function SightingCard({
         className="block w-full text-left p-5 pl-6 pb-0 cursor-pointer"
       >
         {/* Header */}
-        <div className="flex items-start justify-between gap-3">
+        <div className={cn(
+          "flex items-start justify-between gap-3",
+          canModerate && "pr-10"
+        )}>
           <div className="flex items-center gap-3">
-            <div className="avatar-ring shrink-0">
-              <div
-                className={cn(
-                  "w-10 h-10 rounded-full flex items-center justify-center text-white font-bold text-sm bg-gradient-to-br",
-                  avatarColors[index % avatarColors.length]
-                )}
-              >
-                {sighting.nickname[0].toUpperCase()}
-              </div>
-            </div>
+            <Avatar
+              nickname={sighting.nickname}
+              avatarUrl={sighting.avatarUrl}
+              size="md"
+              ring
+              gradient={avatarColors[index % avatarColors.length]}
+              className="shrink-0"
+            />
             <div className="min-w-0">
               <p className="font-semibold text-deep-900 dark:text-white text-[15px] truncate">
                 {sighting.nickname}
@@ -205,14 +230,43 @@ function SightingCard({
   );
 }
 
+type SortOption = "newest" | "most_liked" | "most_commented";
+
+const SORT_LABELS: Record<SortOption, string> = {
+  newest: "Newest",
+  most_liked: "Most Liked",
+  most_commented: "Most Commented",
+};
+
+function sortSightings(sightings: Sighting[], sort: SortOption): Sighting[] {
+  const copy = [...sightings];
+  if (sort === "most_liked") return copy.sort((a, b) => b.likeCount - a.likeCount);
+  if (sort === "most_commented") return copy.sort((a, b) => b.commentCount - a.commentCount);
+  return copy.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+}
+
 export default function FeedPage() {
   const { user, token } = useAuth();
+  const canModerate = user?.role === "admin";
   const [sightings, setSightings] = useState<Sighting[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [selected, setSelected] = useState<Sighting | null>(null);
   const [modalOpen, setModalOpen] = useState(false);
   const [coords, setCoords] = useState<{ lat: number; lng: number } | null>(null);
+  const [sortBy, setSortBy] = useState<SortOption>("newest");
+  const [sortOpen, setSortOpen] = useState(false);
+  const sortRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    function handleClickOutside(e: MouseEvent) {
+      if (sortRef.current && !sortRef.current.contains(e.target as Node)) {
+        setSortOpen(false);
+      }
+    }
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, []);
 
   // Request location for distance calculation (optional)
   useEffect(() => {
@@ -344,10 +398,32 @@ export default function FeedPage() {
             Sardine Sightings
           </span>
         </div>
-        <button className="flex items-center gap-1.5 text-sm font-medium text-deep-600 dark:text-deep-300 hover:text-deep-700 dark:hover:text-deep-200 transition-colors px-3 py-2 rounded-xl bg-white dark:bg-deep-800 border border-deep-200 dark:border-deep-700 shadow-sm hover:shadow">
-          Newest
-          <ChevronDown className="w-4 h-4" />
-        </button>
+        <div className="relative" ref={sortRef}>
+          <button
+            onClick={() => setSortOpen((o) => !o)}
+            className="flex items-center gap-1.5 text-sm font-medium text-deep-600 dark:text-deep-300 hover:text-deep-700 dark:hover:text-deep-200 transition-colors px-3 py-2 rounded-xl bg-white dark:bg-deep-800 border border-deep-200 dark:border-deep-700 shadow-sm hover:shadow cursor-pointer"
+          >
+            {SORT_LABELS[sortBy]}
+            <ChevronDown className={`w-4 h-4 transition-transform ${sortOpen ? "rotate-180" : ""}`} />
+          </button>
+          {sortOpen && (
+            <div className="absolute right-0 top-full mt-1 z-50 w-44 rounded-xl border border-deep-200 dark:border-deep-700 bg-white dark:bg-deep-800 shadow-lg overflow-hidden">
+              {(Object.keys(SORT_LABELS) as SortOption[]).map((opt) => (
+                <button
+                  key={opt}
+                  onClick={() => { setSortBy(opt); setSortOpen(false); }}
+                  className={`w-full text-left px-4 py-2.5 text-sm transition-colors cursor-pointer ${
+                    sortBy === opt
+                      ? "bg-ocean-50 dark:bg-ocean-950/30 text-ocean-600 dark:text-ocean-400 font-semibold"
+                      : "text-deep-700 dark:text-deep-200 hover:bg-deep-50 dark:hover:bg-deep-700"
+                  }`}
+                >
+                  {SORT_LABELS[opt]}
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
       </div>
 
       {/* Error state */}
@@ -385,14 +461,16 @@ export default function FeedPage() {
         </div>
       ) : (
         <div className="space-y-4">
-          {sightings.map((sighting, index) => (
+          {sortSightings(sightings, sortBy).map((sighting, index) => (
             <SightingCard
               key={sighting.id}
               sighting={sighting}
               index={index}
               token={token}
+              canModerate={canModerate}
               onOpen={() => openSighting(sighting)}
               onLikeChange={handleLikeChange}
+              onDeleted={handleDelete}
             />
           ))}
         </div>

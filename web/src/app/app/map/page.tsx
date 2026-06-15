@@ -4,21 +4,63 @@ import { useState, useEffect, useCallback } from "react";
 import {
   APIProvider,
   Map,
-  AdvancedMarker,
+  Marker,
   InfoWindow,
   useMap,
+  useApiLoadingStatus,
+  APILoadingStatus,
 } from "@vis.gl/react-google-maps";
-import { Fish, MapPin, Layers, Navigation, Clock, Loader2 } from "lucide-react";
+import { Fish, MapPin, Layers, Navigation, Clock, Loader2, AlertTriangle, X } from "lucide-react";
 import { cn, timeAgo, formatDistance } from "@/lib/utils";
 import { api } from "@/lib/api";
 import { useAuth } from "@/lib/auth-context";
 import { SightingDetailModal } from "@/components/app/SightingDetailModal";
+import { Avatar } from "@/components/ui/avatar";
 import type { Sighting } from "@/lib/types";
 
 const GOOGLE_MAPS_KEY = process.env.NEXT_PUBLIC_GOOGLE_MAPS_KEY || "";
 
 const DEFAULT_CENTER = { lat: -30.15, lng: 30.82 };
 const DEFAULT_ZOOM = 11;
+
+/**
+ * Returns a data-URL SVG of a stylised sardine — body, tail, dorsal + pectoral
+ * fins, and a friendly eye. Encoded as `data:image/svg+xml;utf8,` so the
+ * browser doesn't need an extra HTTP roundtrip.
+ *
+ * `selected = true` swaps to a brighter coral palette + scales 30% larger so
+ * the active marker pops out of the cluster.
+ */
+function fishIconUrl(selected: boolean): string {
+  const scale = selected ? 1.3 : 1;
+  const w = Math.round(40 * scale);
+  const h = Math.round(28 * scale);
+
+  // Ocean blue palette (default) vs sunset/coral palette (selected)
+  const body = selected ? "#fb7185" : "#2287d6"; // coral-400 / ocean-500
+  const accent = selected ? "#e11d48" : "#1c64bf"; // coral-600 / ocean-700
+  const dark = selected ? "#7f1d1d" : "#0c3a6e";
+
+  const svg = `<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 40 28' width='${w}' height='${h}'>
+    <!-- soft drop shadow so it pops off the map tiles -->
+    <ellipse cx='18' cy='25' rx='13' ry='2' fill='black' opacity='0.25'/>
+    <!-- tail fin -->
+    <path d='M 26 14 L 38 4 L 36 14 L 38 24 Z' fill='${accent}' stroke='white' stroke-width='1.5' stroke-linejoin='round'/>
+    <!-- main body -->
+    <ellipse cx='15' cy='14' rx='14' ry='9' fill='${body}' stroke='white' stroke-width='1.5'/>
+    <!-- dorsal fin (top) -->
+    <path d='M 12 6 L 17 1 L 22 6 Z' fill='${accent}' stroke='white' stroke-width='1.5' stroke-linejoin='round'/>
+    <!-- pectoral fin (side) -->
+    <path d='M 10 17 L 18 19 L 13 24 Z' fill='${accent}' stroke='white' stroke-width='1.2' stroke-linejoin='round'/>
+    <!-- gill stripe -->
+    <path d='M 9 9 Q 7 14 9 19' fill='none' stroke='${dark}' stroke-width='1' opacity='0.5'/>
+    <!-- eye -->
+    <circle cx='5' cy='12' r='2.2' fill='white'/>
+    <circle cx='5' cy='12' r='1.1' fill='${dark}'/>
+  </svg>`.replace(/\s+/g, " ");
+
+  return `data:image/svg+xml;utf8,${encodeURIComponent(svg)}`;
+}
 
 function SightingMarker({
   sighting,
@@ -30,27 +72,13 @@ function SightingMarker({
   onClick: () => void;
 }) {
   return (
-    <AdvancedMarker
+    <Marker
       position={{ lat: sighting.latitude, lng: sighting.longitude }}
       onClick={onClick}
       zIndex={isSelected ? 100 : 1}
-    >
-      <div className="relative cursor-pointer group">
-        <div
-          className="absolute inset-0 rounded-full animate-ping opacity-30 bg-ocean-400"
-          style={{ animationDuration: "2s" }}
-        />
-        <div
-          className={cn(
-            "relative w-10 h-10 rounded-full flex items-center justify-center shadow-lg transition-transform group-hover:scale-110 bg-ocean-600",
-            isSelected && "scale-110 ring-3 ring-white",
-          )}
-        >
-          <Fish className="w-5 h-5 text-white" />
-        </div>
-        <div className="absolute -bottom-1.5 left-1/2 -translate-x-1/2 w-3 h-3 rotate-45 bg-ocean-600" />
-      </div>
-    </AdvancedMarker>
+      icon={fishIconUrl(isSelected)}
+      title={`Sighting by ${sighting.nickname}`}
+    />
   );
 }
 
@@ -60,16 +88,18 @@ function UserLocationMarker({
   position: { lat: number; lng: number };
 }) {
   return (
-    <AdvancedMarker position={position} zIndex={50}>
-      <div className="relative">
-        <div
-          className="absolute -inset-4 rounded-full bg-ocean-500/20 animate-ping"
-          style={{ animationDuration: "3s" }}
-        />
-        <div className="absolute -inset-3 rounded-full bg-ocean-500/10" />
-        <div className="w-4 h-4 rounded-full bg-ocean-500 border-3 border-white shadow-lg relative z-10" />
-      </div>
-    </AdvancedMarker>
+    <Marker
+      position={position}
+      zIndex={50}
+      icon={{
+        path: 0, // google.maps.SymbolPath.CIRCLE — using literal 0 so we don't have to wait for the API to load
+        scale: 8,
+        fillColor: "#0ea5e9", // ocean-500
+        fillOpacity: 1,
+        strokeColor: "#ffffff",
+        strokeWeight: 3,
+      }}
+    />
   );
 }
 
@@ -206,14 +236,23 @@ function MapContent({
           }}
           onCloseClick={() => setSelectedSighting(null)}
           pixelOffset={[0, -45]}
+          headerDisabled
         >
-          <div className="p-1 min-w-[240px] max-w-[300px]">
+          <div className="relative p-1 pr-6 min-w-[240px] max-w-[300px]">
+            <button
+              onClick={() => setSelectedSighting(null)}
+              aria-label="Close"
+              className="absolute top-0 right-0 w-7 h-7 rounded-full bg-gray-100 hover:bg-gray-200 text-gray-600 hover:text-gray-900 flex items-center justify-center transition-colors"
+            >
+              <X className="w-4 h-4" />
+            </button>
             <div className="flex items-center gap-2.5 mb-2">
-              <div className="avatar-ring">
-                <div className="w-8 h-8 rounded-full flex items-center justify-center text-white text-xs font-bold bg-gradient-to-br from-ocean-500 to-ocean-600">
-                  {selectedSighting.nickname[0].toUpperCase()}
-                </div>
-              </div>
+              <Avatar
+                nickname={selectedSighting.nickname}
+                avatarUrl={selectedSighting.avatarUrl}
+                size="sm"
+                ring
+              />
               <div className="flex-1">
                 <p className="font-semibold text-sm text-gray-900">
                   {selectedSighting.nickname}
@@ -318,25 +357,25 @@ export default function MapPage() {
   return (
     <div className="relative h-[calc(100vh-3.5rem)] lg:h-screen">
       <APIProvider apiKey={GOOGLE_MAPS_KEY}>
-        <Map
-          defaultCenter={DEFAULT_CENTER}
-          defaultZoom={DEFAULT_ZOOM}
-          mapId="sardine-spotter-map"
-          gestureHandling="greedy"
-          disableDefaultUI={true}
-          clickableIcons={false}
-          className="w-full h-full"
-          colorScheme="LIGHT"
-        >
-          <MapContent
-            sightings={sightings}
-            loading={loading}
-            onOpenDetail={(s) => {
-              setDetailSighting(s);
-              setModalOpen(true);
-            }}
-          />
-        </Map>
+        <MapLoadingGate>
+          <Map
+            defaultCenter={DEFAULT_CENTER}
+            defaultZoom={DEFAULT_ZOOM}
+            gestureHandling="greedy"
+            disableDefaultUI={true}
+            clickableIcons={false}
+            className="w-full h-full"
+          >
+            <MapContent
+              sightings={sightings}
+              loading={loading}
+              onOpenDetail={(s) => {
+                setDetailSighting(s);
+                setModalOpen(true);
+              }}
+            />
+          </Map>
+        </MapLoadingGate>
       </APIProvider>
 
       <SightingDetailModal
@@ -348,5 +387,57 @@ export default function MapPage() {
         }
       />
     </div>
+  );
+}
+
+/**
+ * Renders a meaningful loading screen and an actionable error screen instead
+ * of letting the map silently spin forever when the Google Maps API fails to
+ * authenticate (e.g. invalid key, referrer restriction, billing disabled).
+ */
+function MapLoadingGate({ children }: { children: React.ReactNode }) {
+  const status = useApiLoadingStatus();
+
+  if (status === APILoadingStatus.FAILED || status === APILoadingStatus.AUTH_FAILURE) {
+    return (
+      <div className="absolute inset-0 flex items-center justify-center bg-deep-100 dark:bg-deep-950 z-10">
+        <div className="max-w-md text-center p-8">
+          <div className="w-16 h-16 rounded-full bg-coral-100 dark:bg-coral-900/40 flex items-center justify-center mx-auto mb-4">
+            <AlertTriangle className="w-8 h-8 text-coral-500 dark:text-coral-400" />
+          </div>
+          <h2 className="text-lg font-bold text-deep-900 dark:text-white">
+            Google Maps failed to load
+          </h2>
+          <p className="text-sm text-deep-600 dark:text-deep-300 mt-2">
+            Your API key was rejected by Google. Common causes:
+          </p>
+          <ul className="text-sm text-deep-600 dark:text-deep-300 mt-2 space-y-1 text-left list-disc list-inside">
+            <li>HTTP referrer restrictions in GCP don&apos;t include <code className="text-xs bg-deep-200 dark:bg-deep-800 px-1 rounded">localhost:3000</code></li>
+            <li>Maps JavaScript API isn&apos;t enabled for the project</li>
+            <li>Billing isn&apos;t enabled on the project</li>
+            <li>The key has been rotated or restricted</li>
+          </ul>
+          <p className="text-xs text-deep-500 dark:text-deep-400 mt-3">
+            Open the browser console for the exact error from Google.
+          </p>
+        </div>
+      </div>
+    );
+  }
+
+  if (status === APILoadingStatus.LOADED) {
+    return <>{children}</>;
+  }
+
+  return (
+    <>
+      {children}
+      <div className="absolute inset-0 flex items-center justify-center bg-deep-100/80 dark:bg-deep-950/80 z-10 pointer-events-none">
+        <div className="flex flex-col items-center gap-2 text-deep-600 dark:text-deep-300">
+          <Loader2 className="w-6 h-6 animate-spin" />
+          <span className="text-sm">Loading map…</span>
+        </div>
+      </div>
+    </>
   );
 }

@@ -1,33 +1,50 @@
 "use client";
 
-import { useState } from "react";
-import { useRouter } from "next/navigation";
+import { useEffect, useState } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
-import { Fish, Mail, Lock, Eye, EyeOff, ArrowRight, AlertCircle } from "lucide-react";
+import { Mail, Lock, Eye, EyeOff, ArrowRight, AlertCircle, Ban } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { Logo } from "@/components/ui/logo";
 import { motion } from "framer-motion";
 import { useAuth } from "@/lib/auth-context";
 
 export default function LoginPage() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const { login } = useAuth();
   const [showPassword, setShowPassword] = useState(false);
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+  const [banReason, setBanReason] = useState<string | null>(null);
+
+  // When apiFetch detects a mid-session ban it redirects here with ?banReason=…
+  useEffect(() => {
+    const reason = searchParams.get("banReason");
+    if (reason) setBanReason(decodeURIComponent(reason));
+  }, [searchParams]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError("");
+    setBanReason(null);
     setLoading(true);
 
     try {
       await login(email, password);
       router.push("/app");
     } catch (err: unknown) {
-      const message = err instanceof Error ? err.message : "Login failed";
-      setError(message);
+      if (err instanceof Error) {
+        if (err.message === "banned") {
+          setBanReason((err as Error & { banReason?: string }).banReason ?? "Your account has been suspended. Please contact support.");
+        } else {
+          setError(err.message);
+        }
+      } else {
+        setError("Login failed");
+      }
     } finally {
       setLoading(false);
     }
@@ -58,11 +75,9 @@ export default function LoginPage() {
       >
         <div className="text-center mb-10">
           <Link href="/" className="inline-flex items-center gap-3 group">
-            <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-ocean-500 to-teal-500 flex items-center justify-center shadow-lg shadow-ocean-500/30 group-hover:shadow-ocean-500/50 transition-shadow">
-              <Fish className="w-6 h-6 text-white" />
-            </div>
+            <Logo size="lg" className="group-hover:shadow-ocean-500/50 transition-shadow" />
             <span className="text-2xl font-display font-bold text-white tracking-tight">
-              Sardine Spotter
+              SardineWatch
             </span>
           </Link>
         </div>
@@ -74,6 +89,26 @@ export default function LoginPage() {
               Log in to check the latest sardine sightings
             </p>
           </div>
+
+          {banReason && (
+            <motion.div
+              initial={{ opacity: 0, y: -8 }}
+              animate={{ opacity: 1, y: 0 }}
+              className="mb-5 rounded-xl bg-coral-50 dark:bg-coral-500/10 border border-coral-300 dark:border-coral-500/30 text-coral-700 dark:text-coral-300 overflow-hidden"
+            >
+              <div className="flex items-center gap-2 px-3.5 py-2.5 bg-coral-100 dark:bg-coral-500/20 border-b border-coral-200 dark:border-coral-500/20">
+                <Ban className="w-4 h-4 flex-shrink-0" />
+                <span className="font-semibold text-sm">Account suspended</span>
+              </div>
+              <p className="px-3.5 py-3 text-sm leading-relaxed">{banReason}</p>
+              <p className="px-3.5 pb-3 text-xs text-coral-500 dark:text-coral-400">
+                If you believe this is an error, contact{" "}
+                <a href="mailto:support@sardinespotter.com" className="underline">
+                  support@sardinespotter.com
+                </a>
+              </p>
+            </motion.div>
+          )}
 
           {error && (
             <motion.div

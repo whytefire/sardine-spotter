@@ -11,6 +11,9 @@ import {
   Moon,
   Loader2,
   AlertTriangle,
+  FileText,
+  Cookie,
+  ShieldCheck,
 } from "lucide-react";
 import Link from "next/link";
 import { cn } from "@/lib/utils";
@@ -130,7 +133,7 @@ export default function SettingsPage() {
           Settings
         </h1>
         <p className="text-deep-500 dark:text-deep-400 text-sm mt-1.5">
-          Customize your Sardine Spotter experience
+          Customize your SardineWatch experience
         </p>
       </div>
 
@@ -238,6 +241,34 @@ export default function SettingsPage() {
         </div>
       </div>
 
+      {/* Legal & privacy */}
+      <div className="rounded-2xl border border-deep-200 dark:border-deep-700 bg-white dark:bg-deep-800 divide-y divide-deep-100 dark:divide-deep-700 mb-6 shadow-sm overflow-hidden">
+        <Link href="/privacy" className="block hover:bg-deep-50 dark:hover:bg-deep-750 transition-colors">
+          <SettingRow
+            icon={ShieldCheck}
+            label="Privacy Policy"
+            description="How we handle your personal information"
+            chevron
+          />
+        </Link>
+        <Link href="/terms" className="block hover:bg-deep-50 dark:hover:bg-deep-750 transition-colors">
+          <SettingRow
+            icon={FileText}
+            label="Terms of Service"
+            description="The rules of using SardineWatch"
+            chevron
+          />
+        </Link>
+        <Link href="/cookies" className="block hover:bg-deep-50 dark:hover:bg-deep-750 transition-colors">
+          <SettingRow
+            icon={Cookie}
+            label="Cookie Policy"
+            description="What we store on your device"
+            chevron
+          />
+        </Link>
+      </div>
+
       {/* Logout */}
       <button
         onClick={handleLogout}
@@ -248,7 +279,7 @@ export default function SettingsPage() {
       </button>
 
       <p className="text-center text-xs text-deep-400 dark:text-deep-500 mt-8">
-        Sardine Spotter v2.0.0
+        SardineWatch v2.0.0
       </p>
     </div>
   );

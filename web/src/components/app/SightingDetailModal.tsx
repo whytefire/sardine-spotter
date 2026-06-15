@@ -18,6 +18,8 @@ import { cn, timeAgo, formatDistance } from "@/lib/utils";
 import { photoSrc } from "@/lib/images";
 import { api } from "@/lib/api";
 import { useAuth } from "@/lib/auth-context";
+import { Avatar } from "@/components/ui/avatar";
+import { ModerationMenu } from "@/components/app/ModerationMenu";
 import type { Sighting, Comment } from "@/lib/types";
 
 interface SightingDetailModalProps {
@@ -153,10 +155,11 @@ export function SightingDetailModal({
   };
 
   const photo = photoSrc(sighting?.photoUrl);
-  const canDelete =
-    sighting &&
-    user &&
-    (sighting.userId === user.id || user.role === "god" || user.role === "admin");
+  const isOwner = !!(sighting && user && sighting.userId === user.id);
+  const isModerator = !!(user && user.role === "admin");
+  // Moderation kebab shows for moderators acting on OTHER people's content.
+  // Owners still use the existing simple "Delete" button (no reason needed).
+  const showModeratorMenu = isModerator && !isOwner;
 
   return (
     <AnimatePresence>
@@ -185,11 +188,13 @@ export function SightingDetailModal({
               {/* Header */}
               <div className="flex items-center justify-between px-5 py-4 border-b border-deep-200 dark:border-deep-700 shrink-0">
                 <div className="flex items-center gap-3">
-                  <div className="avatar-ring shrink-0">
-                    <div className="w-10 h-10 rounded-full bg-gradient-to-br from-ocean-500 to-teal-500 flex items-center justify-center text-white font-bold text-sm">
-                      {sighting.nickname[0]?.toUpperCase() || "?"}
-                    </div>
-                  </div>
+                  <Avatar
+                    nickname={sighting.nickname}
+                    avatarUrl={sighting.avatarUrl}
+                    size="md"
+                    ring
+                    className="shrink-0"
+                  />
                   <div className="min-w-0">
                     <h2
                       id="sighting-modal-title"
@@ -288,7 +293,7 @@ export function SightingDetailModal({
                     <span className="text-sm text-deep-500 dark:text-deep-400 font-medium">
                       {comments.length} {comments.length === 1 ? "comment" : "comments"}
                     </span>
-                    {canDelete && (
+                    {isOwner && (
                       <button
                         onClick={handleDelete}
                         disabled={deleting}
@@ -297,6 +302,22 @@ export function SightingDetailModal({
                         <Trash2 className="w-4 h-4" />
                         {deleting ? "Deleting…" : "Delete"}
                       </button>
+                    )}
+                    {showModeratorMenu && token && sighting && (
+                      <div className="ml-auto">
+                        <ModerationMenu
+                          canModerate
+                          targetLabel="this sighting"
+                          authorNickname={sighting.nickname}
+                          variant="ghost"
+                          align="right"
+                          onDelete={async (reason) => {
+                            await api.deleteSighting(token, sighting.id, reason);
+                            onDelete?.(sighting.id);
+                            onClose();
+                          }}
+                        />
+                      </div>
                     )}
                   </div>
 
@@ -314,26 +335,50 @@ export function SightingDetailModal({
                       </p>
                     ) : (
                       <ul className="space-y-3">
-                        {comments.map((c) => (
-                          <li key={c.id} className="flex items-start gap-3">
-                            <div className="w-8 h-8 rounded-full bg-gradient-to-br from-ocean-500 to-teal-500 flex items-center justify-center text-white font-bold text-xs shrink-0">
-                              {c.nickname[0]?.toUpperCase() || "?"}
-                            </div>
-                            <div className="flex-1 min-w-0 bg-deep-50 dark:bg-deep-800 rounded-xl px-3 py-2">
-                              <div className="flex items-center gap-2 mb-0.5">
-                                <span className="font-semibold text-deep-900 dark:text-white text-sm">
-                                  {c.nickname}
-                                </span>
-                                <span className="text-[11px] text-deep-500 dark:text-deep-400">
-                                  {timeAgo(c.createdAt)}
-                                </span>
+                        {comments.map((c) => {
+                          const isCommentOwner = !!(user && c.userId === user.id);
+                          const canDeleteComment = isCommentOwner || isModerator;
+                          return (
+                            <li key={c.id} className="flex items-start gap-3 group/comment">
+                              <Avatar
+                                nickname={c.nickname}
+                                avatarUrl={c.avatarUrl}
+                                size="sm"
+                                className="shrink-0"
+                              />
+                              <div className="flex-1 min-w-0 bg-deep-50 dark:bg-deep-800 rounded-xl px-3 py-2">
+                                <div className="flex items-center gap-2 mb-0.5">
+                                  <span className="font-semibold text-deep-900 dark:text-white text-sm">
+                                    {c.nickname}
+                                  </span>
+                                  <span className="text-[11px] text-deep-500 dark:text-deep-400">
+                                    {timeAgo(c.createdAt)}
+                                  </span>
+                                </div>
+                                <p className="text-sm text-deep-700 dark:text-deep-200 leading-relaxed break-words">
+                                  {c.text}
+                                </p>
                               </div>
-                              <p className="text-sm text-deep-700 dark:text-deep-200 leading-relaxed break-words">
-                                {c.text}
-                              </p>
-                            </div>
-                          </li>
-                        ))}
+                              {canDeleteComment && token && (
+                                <div className="shrink-0 -mt-0.5">
+                                  <ModerationMenu
+                                    canModerate
+                                    targetLabel="this comment"
+                                    authorNickname={c.nickname}
+                                    variant="ghost"
+                                    align="right"
+                                    onDelete={async (reason) => {
+                                      await api.deleteComment(token, c.id, reason);
+                                      setComments((prev) =>
+                                        prev.filter((x) => x.id !== c.id)
+                                      );
+                                    }}
+                                  />
+                                </div>
+                              )}
+                            </li>
+                          );
+                        })}
                       </ul>
                     )}
                     <div ref={commentsEndRef} />

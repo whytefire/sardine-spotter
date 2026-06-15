@@ -168,7 +168,7 @@ export default function Hero() {
                 Get Started — It&apos;s Free
               </Button>
             </Link>
-            <Link href="/map">
+            <Link href="/app/map">
               <Button
                 size="lg"
                 variant="outline"

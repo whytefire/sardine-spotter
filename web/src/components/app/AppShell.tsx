@@ -1,10 +1,9 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import {
-  Fish,
   Map,
   Newspaper,
   PlusCircle,
@@ -16,13 +15,30 @@ import {
   Shield,
   Sun,
   Moon,
+  LayoutDashboard,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Avatar } from "@/components/ui/avatar";
+import { Logo } from "@/components/ui/logo";
 import { motion, AnimatePresence } from "framer-motion";
 import { useAuth } from "@/lib/auth-context";
 import { useTheme } from "next-themes";
 import { PageTransition } from "@/components/ui/page-transition";
+import { api } from "@/lib/api";
+
+/**
+ * Fired by any page that changes notification read-state (e.g. the alerts page
+ * after Mark-all-read or opening an alert) so the sidebar badge can update
+ * immediately without waiting for the next poll.
+ */
+const NOTIFICATIONS_UPDATED_EVENT = "ss:notifications-updated";
+
+/** Cap the badge so the layout doesn't break with hundreds of unread alerts. */
+function formatUnread(n: number): string {
+  if (n <= 0) return "";
+  if (n > 99) return "99+";
+  return String(n);
+}
 
 const navItems = [
   { label: "Feed", href: "/app", icon: Newspaper },
@@ -35,13 +51,52 @@ const navItems = [
 export default function AppShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const router = useRouter();
-  const { user, loading, logout } = useAuth();
+  const { user, token, loading, logout } = useAuth();
   const { theme, setTheme, resolvedTheme } = useTheme();
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [mounted, setMounted] = useState(false);
+  const [unreadCount, setUnreadCount] = useState(0);
   useEffect(() => setMounted(true), []);
 
   const isDark = mounted ? resolvedTheme === "dark" : false;
+
+  // Pull the unread alert count and keep it in sync with: (a) login state,
+  // (b) navigation, (c) periodic polling, and (d) explicit "I just changed
+  // notification state" events from the alerts page.
+  const refreshUnread = useCallback(async () => {
+    if (!token) {
+      setUnreadCount(0);
+      return;
+    }
+    try {
+      const res = await api.getNotifications(token, true);
+      setUnreadCount(res.data?.length ?? 0);
+    } catch (err) {
+      console.error("Failed to fetch unread alerts:", err);
+    }
+  }, [token]);
+
+  useEffect(() => {
+    refreshUnread();
+  }, [refreshUnread, pathname]);
+
+  useEffect(() => {
+    if (!token) return;
+    const id = window.setInterval(refreshUnread, 30_000);
+    return () => window.clearInterval(id);
+  }, [token, refreshUnread]);
+
+  useEffect(() => {
+    const handler = () => refreshUnread();
+    window.addEventListener(NOTIFICATIONS_UPDATED_EVENT, handler);
+    return () => window.removeEventListener(NOTIFICATIONS_UPDATED_EVENT, handler);
+  }, [refreshUnread]);
+
+  const unreadLabel = formatUnread(unreadCount);
+  const bellAriaLabel =
+    unreadCount > 0
+      ? `View alerts (${unreadCount} unread)`
+      : "View alerts";
 
   if (loading) {
     return (
@@ -61,7 +116,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
     router.push("/login");
   };
 
-  const roleBadge = user.role === "god" || user.role === "admin";
+  const roleBadge = user.role === "admin";
 
   return (
     <div className="min-h-screen bg-deep-100 dark:bg-deep-950 flex">
@@ -70,11 +125,9 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
         {/* Logo */}
         <div className="h-16 flex items-center px-6 border-b border-white/10">
           <Link href="/app" className="flex items-center gap-2.5">
-            <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-ocean-500 to-teal-500 flex items-center justify-center shadow-lg shadow-ocean-500/30">
-              <Fish className="w-5 h-5 text-white" />
-            </div>
+            <Logo size="md" />
             <span className="text-lg font-display font-bold text-white tracking-tight">
-              Sardine Spotter
+              SardineWatch
             </span>
           </Link>
         </div>
@@ -105,14 +158,43 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
                   )}
                 />
                 {item.label}
-                {item.label === "Alerts" && (
-                  <span className="ml-auto w-5 h-5 rounded-full bg-coral-500 text-white text-xs flex items-center justify-center font-bold">
-                    3
+                {item.label === "Alerts" && unreadCount > 0 && (
+                  <span
+                    className={cn(
+                      "ml-auto min-w-[1.25rem] h-5 px-1.5 rounded-full bg-coral-500 text-white text-xs flex items-center justify-center font-bold",
+                      unreadCount > 99 && "text-[10px]"
+                    )}
+                    aria-label={`${unreadCount} unread`}
+                  >
+                    {unreadLabel}
                   </span>
                 )}
               </Link>
             );
           })}
+
+          {/* Admin-only dashboard link */}
+          {user?.role === "admin" && (
+            <>
+              <div className="my-2 mx-3 h-px bg-white/10" />
+              <Link
+                href="/app/admin"
+                aria-current={pathname === "/app/admin" ? "page" : undefined}
+                className={cn(
+                  "flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-all relative",
+                  pathname === "/app/admin"
+                    ? "bg-white/10 text-white"
+                    : "text-deep-400 hover:bg-white/5 hover:text-deep-200"
+                )}
+              >
+                {pathname === "/app/admin" && (
+                  <div className="absolute left-0 top-1/2 -translate-y-1/2 w-[3px] h-5 rounded-r-full bg-ocean-400" />
+                )}
+                <LayoutDashboard className={cn("w-5 h-5", pathname === "/app/admin" ? "text-ocean-400" : "text-deep-500")} />
+                Admin
+              </Link>
+            </>
+          )}
         </nav>
 
         {/* Dark mode toggle */}
@@ -155,7 +237,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
                     ? "bg-ocean-500/20 text-ocean-300"
                     : "bg-white/10 text-deep-400"
                 )}>
-                  {user.role === "god" ? "God Mode" : user.role === "admin" ? "Admin" : "Member"}
+                  {user.role === "admin" ? "Admin" : "Member"}
                 </span>
               </div>
             </div>
@@ -194,11 +276,9 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
                   className="flex items-center gap-2.5"
                   onClick={() => setSidebarOpen(false)}
                 >
-                  <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-ocean-600 to-ocean-400 flex items-center justify-center">
-                    <Fish className="w-5 h-5 text-white" />
-                  </div>
+                  <Logo size="md" shadow={false} />
                   <span className="text-lg font-bold text-deep-950 dark:text-deep-50">
-                    Sardine Spotter
+                    SardineWatch
                   </span>
                 </Link>
                 <button
@@ -268,20 +348,25 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
             <Menu className="w-5 h-5" />
           </button>
           <div className="flex items-center gap-2">
-            <div className="w-7 h-7 rounded-lg bg-gradient-to-br from-ocean-600 to-ocean-400 flex items-center justify-center">
-              <Fish className="w-4 h-4 text-white" />
-            </div>
+            <Logo size="sm" shadow={false} />
             <span className="font-bold text-deep-950 dark:text-deep-50">
-              Sardine Spotter
+              SardineWatch
             </span>
           </div>
           <Link
             href="/app/alerts"
             className="p-2 -mr-2 text-deep-500 dark:text-deep-300 hover:text-deep-700 dark:hover:text-deep-100 rounded-lg relative min-h-[44px] min-w-[44px] flex items-center justify-center"
-            aria-label="View alerts (3 unread)"
+            aria-label={bellAriaLabel}
           >
             <Bell className="w-5 h-5" />
-            <span className="absolute top-1.5 right-1.5 w-2.5 h-2.5 rounded-full bg-coral-500 border-2 border-white dark:border-deep-950" aria-hidden="true" />
+            {unreadCount > 0 && (
+              <span
+                className="absolute top-1 right-1 min-w-[1.1rem] h-[1.1rem] px-1 rounded-full bg-coral-500 text-white text-[10px] font-bold flex items-center justify-center border-2 border-white dark:border-deep-950"
+                aria-hidden="true"
+              >
+                {unreadLabel}
+              </span>
+            )}
           </Link>
         </header>
 
@@ -295,6 +380,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
           {navItems.map((item) => {
             const isActive = pathname === item.href;
             const isReport = item.label === "Report";
+            const isAlerts = item.label === "Alerts";
             return (
               <Link
                 key={item.href}
@@ -311,7 +397,17 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
                     <PlusCircle className="w-6 h-6 text-white" />
                   </div>
                 ) : (
-                  <item.icon className="w-5 h-5" />
+                  <span className="relative inline-flex">
+                    <item.icon className="w-5 h-5" />
+                    {isAlerts && unreadCount > 0 && (
+                      <span
+                        className="absolute -top-1.5 -right-2 min-w-[1.1rem] h-[1.1rem] px-1 rounded-full bg-coral-500 text-white text-[10px] font-bold flex items-center justify-center border-2 border-white dark:border-deep-950"
+                        aria-label={`${unreadCount} unread`}
+                      >
+                        {unreadLabel}
+                      </span>
+                    )}
+                  </span>
                 )}
                 <span
                   className={cn(

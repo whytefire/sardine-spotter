@@ -35,7 +35,7 @@ app.get("/api/health", (_req, res) => {
 });
 
 app.listen(PORT, () => {
-  console.log(`Sardine Spotter API running on port ${PORT}`);
+  console.log(`SardineWatch API running on port ${PORT}`);
 });
 
 export default app;

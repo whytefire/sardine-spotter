@@ -96,8 +96,8 @@ export default function ReportPage() {
       setError("We need your location to post a sighting");
       return;
     }
-    if (description.trim().length < 20) {
-      setError("Description must be at least 20 characters");
+    if (description.trim().length < 10) {
+      setError("Description must be at least 10 characters");
       return;
     }
 
@@ -217,17 +217,17 @@ export default function ReportPage() {
             className="w-full px-4 py-3 rounded-xl border border-deep-200 dark:border-deep-700 bg-white dark:bg-deep-800 text-deep-950 dark:text-white placeholder:text-deep-400 dark:placeholder:text-deep-500 focus:outline-none focus:ring-2 focus:ring-ocean-500/50 focus:border-ocean-500 transition-all resize-none"
             placeholder="Describe what you see... Where exactly? How many? What else is happening?"
             required
-            minLength={20}
+            minLength={10}
           />
           <p
             className={cn(
               "mt-1.5 text-xs",
-              description.length < 20
+              description.length < 10
                 ? "text-deep-500 dark:text-deep-400"
                 : "text-sea-green-600 dark:text-sea-green-400"
             )}
           >
-            {description.length}/20 characters minimum
+            {description.length}/10 characters minimum
           </p>
         </div>
 
@@ -333,10 +333,10 @@ export default function ReportPage() {
         {/* Submit */}
         <button
           type="submit"
-          disabled={submitting || description.length < 20 || !coords}
+          disabled={submitting || description.length < 10 || !coords}
           className={cn(
             "btn-glow w-full py-3.5 px-6 rounded-xl bg-gradient-to-r from-coral-500 to-sunset-500 text-white font-semibold text-base shadow-lg shadow-coral-500/20 hover:shadow-coral-500/40 transition-all flex items-center justify-center gap-2",
-            (submitting || description.length < 20 || !coords) &&
+            (submitting || description.length < 10 || !coords) &&
               "opacity-50 cursor-not-allowed shadow-none"
           )}
         >

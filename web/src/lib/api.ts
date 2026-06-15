@@ -26,7 +26,19 @@ async function apiFetch<T>(endpoint: string, options: FetchOptions = {}): Promis
   const data = await res.json();
 
   if (!res.ok) {
-    throw new Error(data.error || `Request failed with status ${res.status}`);
+    const err = new Error(data.error || `Request failed with status ${res.status}`) as Error & { banReason?: string };
+    if (data.banReason) err.banReason = data.banReason;
+
+    // If the server says this account is banned, clear the local session and
+    // send the user to the login page immediately (ban takes effect in real time).
+    if (res.status === 403 && data.error === "banned" && typeof window !== "undefined") {
+      localStorage.removeItem("token");
+      localStorage.removeItem("user");
+      const reason = data.banReason ? `?banReason=${encodeURIComponent(data.banReason)}` : "";
+      window.location.href = `/login${reason}`;
+    }
+
+    throw err;
   }
 
   return data;
@@ -48,6 +60,36 @@ export const api = {
 
   getMe: (token: string) =>
     apiFetch("/api/auth/me", { token }),
+
+  /**
+   * POPIA right of access — downloads the full personal-data dump as a JSON
+   * file. Returns the parsed payload AND triggers a browser file download so
+   * the user keeps a local copy.
+   */
+  exportMyData: async (token: string): Promise<unknown> => {
+    const res = await fetch(`${API_BASE}/api/auth/me/export`, {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    if (!res.ok) throw new Error(`Export failed (${res.status})`);
+    const blob = await res.blob();
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `sardine-spotter-export-${Date.now()}.json`;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(url);
+    return blob.size;
+  },
+
+  /** POPIA right to erasure — permanently deletes the user's account. */
+  deleteMyAccount: (token: string, password: string) =>
+    apiFetch<ApiEnvelope<null>>("/api/auth/me", {
+      method: "DELETE",
+      token,
+      body: JSON.stringify({ password }),
+    }),
 
   updateProfile: (
     token: string,
@@ -101,6 +143,22 @@ export const api = {
       `/api/sightings/${id}/like`,
       { method: "DELETE", token }
     ),
+
+  /** Deletes a sighting. Allowed for the original reporter and for admins. */
+  deleteSighting: (token: string, id: number, reason?: string) =>
+    apiFetch<ApiEnvelope<null>>(`/api/sightings/${id}`, {
+      method: "DELETE",
+      token,
+      body: JSON.stringify({ reason: reason ?? null }),
+    }),
+
+  /** Deletes a single comment. Allowed for its author and for admins. */
+  deleteComment: (token: string, commentId: number, reason?: string) =>
+    apiFetch<ApiEnvelope<null>>(`/api/comments/${commentId}`, {
+      method: "DELETE",
+      token,
+      body: JSON.stringify({ reason: reason ?? null }),
+    }),
 
   createSighting: (token: string, data: {
     description: string;

@@ -1,6 +1,12 @@
 // Bumped to force re-install when the fetch handler changes.
-const CACHE_NAME = "sardine-spotter-v4.0.0";
-const PRECACHE_URLS = ["/manifest.json"];
+const CACHE_NAME = "sardine-spotter-v5.0.0";
+const OFFLINE_URL = "/offline.html";
+const PRECACHE_URLS = [
+  "/manifest.json",
+  OFFLINE_URL,
+  "/icons/icon-192-maskable.png",
+  "/favicon.ico",
+];
 
 self.addEventListener("install", (event) => {
   event.waitUntil(
@@ -46,7 +52,10 @@ self.addEventListener("fetch", (event) => {
   // a stale HTML document.
   if (url.hostname === "localhost" || url.hostname === "127.0.0.1") return;
 
-  // Production: network-first with cache fallback for navigation requests
+  // Production: network-first with cache fallback for navigation requests.
+  // Falls through to the precached /offline.html when both network and cache
+  // miss, so the user sees a branded "you're offline" screen instead of a
+  // raw browser chrome error.
   event.respondWith(
     fetch(request)
       .then((response) => {
@@ -56,7 +65,12 @@ self.addEventListener("fetch", (event) => {
         }
         return response;
       })
-      .catch(() => caches.match(request).then((cached) => cached || Response.error()))
+      .catch(async () => {
+        const cached = await caches.match(request);
+        if (cached) return cached;
+        const offline = await caches.match(OFFLINE_URL);
+        return offline || Response.error();
+      })
   );
 });
 

@@ -63,7 +63,7 @@ export default function CTA() {
               <span className="gradient-text">sardines</span>?
             </h2>
             <p className="mt-5 text-lg text-ocean-200/80 max-w-xl mx-auto">
-              Join the Sardine Spotter community today. It&apos;s completely free
+              Join the SardineWatch community today. It&apos;s completely free
               and always will be. No upgrades, no catches.
             </p>
             <div className="mt-10 flex flex-col sm:flex-row items-center justify-center gap-4">

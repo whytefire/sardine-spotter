@@ -2,6 +2,7 @@
 
 import { useState, useRef, type ChangeEvent, type FormEvent } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import {
   ArrowLeft,
   Camera,
@@ -14,6 +15,9 @@ import {
   Lock,
   Eye,
   EyeOff,
+  Download,
+  ShieldAlert,
+  ShieldCheck,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/lib/auth-context";
@@ -44,7 +48,60 @@ function Banner({ kind, message }: { kind: BannerKind; message: string }) {
 }
 
 export default function AccountPage() {
-  const { user, token, setUser, setToken } = useAuth();
+  const { user, token, setUser, setToken, logout } = useAuth();
+  const router = useRouter();
+
+  // ====== Data rights state ======
+  const [exportBusy, setExportBusy] = useState(false);
+  const [exportMsg, setExportMsg] = useState<{ kind: BannerKind; text: string } | null>(null);
+  const [deleteOpen, setDeleteOpen] = useState(false);
+  const [deletePassword, setDeletePassword] = useState("");
+  const [deleteConfirm, setDeleteConfirm] = useState("");
+  const [deleteBusy, setDeleteBusy] = useState(false);
+  const [deleteMsg, setDeleteMsg] = useState<string | null>(null);
+
+  const handleExport = async () => {
+    if (!token) return;
+    setExportBusy(true);
+    setExportMsg(null);
+    try {
+      await api.exportMyData(token);
+      setExportMsg({
+        kind: "success",
+        text: "Your data export has been downloaded.",
+      });
+    } catch (err) {
+      setExportMsg({
+        kind: "error",
+        text: err instanceof Error ? err.message : "Failed to export data",
+      });
+    } finally {
+      setExportBusy(false);
+    }
+  };
+
+  const handleDelete = async (e: FormEvent) => {
+    e.preventDefault();
+    if (!token) return;
+    if (deleteConfirm.trim().toUpperCase() !== "DELETE") {
+      setDeleteMsg("Please type DELETE in capital letters to confirm.");
+      return;
+    }
+    if (!deletePassword) {
+      setDeleteMsg("Enter your current password to confirm.");
+      return;
+    }
+    setDeleteBusy(true);
+    setDeleteMsg(null);
+    try {
+      await api.deleteMyAccount(token, deletePassword);
+      logout();
+      router.push("/");
+    } catch (err) {
+      setDeleteMsg(err instanceof Error ? err.message : "Failed to delete account");
+      setDeleteBusy(false);
+    }
+  };
 
   // ====== Profile card state ======
   const [nickname, setNickname] = useState(user?.nickname ?? "");
@@ -438,6 +495,131 @@ export default function AccountPage() {
           </button>
           {pwdMsg && <Banner kind={pwdMsg.kind} message={pwdMsg.text} />}
         </form>
+      </section>
+
+      {/* Your data card — POPIA right of access */}
+      <section className="rounded-2xl border border-deep-200 dark:border-deep-700 bg-white dark:bg-deep-800 p-5 mb-4 shadow-sm">
+        <h2 className="font-semibold text-deep-950 dark:text-white text-base flex items-center gap-2 mb-2">
+          <ShieldCheck className="w-4 h-4 text-ocean-500" />
+          Your data
+        </h2>
+        <p className="text-sm text-deep-600 dark:text-deep-300 mb-4 leading-relaxed">
+          Under POPIA you have the right to see every piece of personal
+          information we hold about you. Click below to download a portable
+          JSON file containing your account, sightings, comments, likes,
+          notifications and push subscriptions.
+        </p>
+        <button
+          type="button"
+          onClick={handleExport}
+          disabled={exportBusy}
+          className="w-full sm:w-auto px-4 py-2.5 rounded-xl text-sm font-semibold border border-deep-300 dark:border-deep-600 text-deep-700 dark:text-deep-200 hover:bg-deep-50 dark:hover:bg-deep-700/50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors min-h-[40px] inline-flex items-center justify-center gap-2"
+        >
+          {exportBusy ? (
+            <Loader2 className="w-4 h-4 animate-spin" />
+          ) : (
+            <Download className="w-4 h-4" />
+          )}
+          Download my data
+        </button>
+        {exportMsg && (
+          <div className="mt-3">
+            <Banner kind={exportMsg.kind} message={exportMsg.text} />
+          </div>
+        )}
+      </section>
+
+      {/* Danger zone card — POPIA right to erasure */}
+      <section className="rounded-2xl border border-coral-300 dark:border-coral-500/40 bg-coral-50/60 dark:bg-coral-500/5 p-5 mb-4">
+        <h2 className="font-semibold text-coral-700 dark:text-coral-300 text-base flex items-center gap-2 mb-2">
+          <ShieldAlert className="w-4 h-4" />
+          Danger zone
+        </h2>
+        <p className="text-sm text-deep-700 dark:text-deep-200 mb-1 leading-relaxed">
+          Permanently delete your account and personal information.
+        </p>
+        <p className="text-xs text-deep-500 dark:text-deep-400 leading-relaxed mb-4">
+          Your profile, email, avatar, likes, push subscriptions and
+          notifications are removed within 30 days. Sightings and comments
+          you posted are kept as part of the community record but anonymised
+          to &ldquo;[deleted user]&rdquo;.
+        </p>
+
+        {!deleteOpen ? (
+          <button
+            type="button"
+            onClick={() => setDeleteOpen(true)}
+            className="w-full sm:w-auto px-4 py-2.5 rounded-xl text-sm font-semibold border border-coral-400 text-coral-700 dark:text-coral-300 hover:bg-coral-100 dark:hover:bg-coral-500/10 transition-colors min-h-[40px] inline-flex items-center justify-center gap-2"
+          >
+            <Trash2 className="w-4 h-4" />
+            Delete my account
+          </button>
+        ) : (
+          <form onSubmit={handleDelete} className="space-y-3 mt-2">
+            <div>
+              <label
+                htmlFor="deleteConfirm"
+                className="block text-xs font-semibold text-deep-700 dark:text-deep-300 mb-1.5"
+              >
+                Type <span className="font-mono text-coral-600 dark:text-coral-400">DELETE</span> to confirm
+              </label>
+              <input
+                id="deleteConfirm"
+                type="text"
+                value={deleteConfirm}
+                onChange={(e) => setDeleteConfirm(e.target.value)}
+                className="w-full px-3 py-2.5 rounded-xl border border-deep-200 dark:border-deep-700 bg-white dark:bg-deep-900 text-deep-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-coral-500 focus:border-transparent text-sm font-mono tracking-wider"
+                placeholder="DELETE"
+                autoComplete="off"
+              />
+            </div>
+            <div>
+              <label
+                htmlFor="deletePassword"
+                className="block text-xs font-semibold text-deep-700 dark:text-deep-300 mb-1.5"
+              >
+                Current password
+              </label>
+              <input
+                id="deletePassword"
+                type="password"
+                value={deletePassword}
+                onChange={(e) => setDeletePassword(e.target.value)}
+                autoComplete="current-password"
+                className="w-full px-3 py-2.5 rounded-xl border border-deep-200 dark:border-deep-700 bg-white dark:bg-deep-900 text-deep-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-coral-500 focus:border-transparent text-sm font-mono tracking-wider"
+              />
+            </div>
+            {deleteMsg && (
+              <p className="text-sm text-coral-700 dark:text-coral-300 flex items-start gap-2">
+                <AlertTriangle className="w-4 h-4 mt-0.5 shrink-0" />
+                {deleteMsg}
+              </p>
+            )}
+            <div className="flex flex-col sm:flex-row gap-2">
+              <button
+                type="submit"
+                disabled={deleteBusy}
+                className="flex-1 sm:flex-none px-4 py-2.5 rounded-xl text-sm font-semibold bg-coral-600 hover:bg-coral-700 text-white disabled:opacity-50 disabled:cursor-not-allowed transition-colors min-h-[40px] inline-flex items-center justify-center gap-2"
+              >
+                {deleteBusy && <Loader2 className="w-4 h-4 animate-spin" />}
+                Permanently delete account
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setDeleteOpen(false);
+                  setDeletePassword("");
+                  setDeleteConfirm("");
+                  setDeleteMsg(null);
+                }}
+                disabled={deleteBusy}
+                className="px-4 py-2.5 rounded-xl text-sm font-medium text-deep-600 dark:text-deep-300 hover:bg-deep-100 dark:hover:bg-deep-700/50 transition-colors min-h-[40px]"
+              >
+                Cancel
+              </button>
+            </div>
+          </form>
+        )}
       </section>
     </div>
   );
