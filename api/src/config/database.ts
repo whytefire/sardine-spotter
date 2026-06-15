@@ -1,15 +1,23 @@
 import sql from "mssql";
 
 function getConfig(): sql.config {
-  console.log(`DB config: server=${process.env.DB_SERVER}, db=${process.env.DB_NAME}`);
+  // DB_SERVER may be "hostname,port" (Azure format) or just "hostname"
+  const rawServer = process.env.DB_SERVER || "localhost";
+  const [server, portStr] = rawServer.split(",");
+  const port = portStr ? parseInt(portStr, 10) : 1433;
+
+  const isAzure = server.includes("database.windows.net");
+
+  console.log(`DB config: server=${server}, port=${port}, db=${process.env.DB_NAME}`);
   return {
-    server: process.env.DB_SERVER || "localhost",
-    database: process.env.DB_NAME || "SardineSpotter",
+    server,
+    port,
+    database: process.env.DB_NAME || "SardineWatch",
     user: process.env.DB_USER || undefined,
     password: process.env.DB_PASSWORD || undefined,
     options: {
-      encrypt: false,
-      trustServerCertificate: true,
+      encrypt: isAzure,
+      trustServerCertificate: !isAzure,
       trustedConnection: process.env.DB_TRUSTED_CONNECTION === "true",
     },
     pool: {
