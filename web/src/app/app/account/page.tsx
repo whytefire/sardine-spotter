@@ -159,7 +159,7 @@ export default function AccountPage() {
       const updateRes = await api.updateProfile(token, {
         avatarUrl: uploadRes.data.avatarUrl,
       });
-      setUser({ ...user, ...updateRes.data });
+      setUser({ ...user, ...updateRes.data, role: updateRes.data.role as "user" | "admin" });
       setProfileMsg({ kind: "success", text: "Profile picture updated." });
     } catch (err) {
       const message = err instanceof Error ? err.message : "Could not upload avatar.";
@@ -175,7 +175,7 @@ export default function AccountPage() {
     setProfileMsg(null);
     try {
       const updateRes = await api.updateProfile(token, { avatarUrl: null });
-      setUser({ ...user, ...updateRes.data });
+      setUser({ ...user, ...updateRes.data, role: updateRes.data.role as "user" | "admin" });
       setProfileMsg({ kind: "success", text: "Profile picture removed." });
     } catch (err) {
       const message = err instanceof Error ? err.message : "Could not remove avatar.";
@@ -200,7 +200,7 @@ export default function AccountPage() {
     setProfileMsg(null);
     try {
       const res = await api.updateProfile(token, { nickname: trimmed });
-      setUser({ ...user, ...res.data });
+      setUser({ ...user, ...res.data, role: res.data.role as "user" | "admin" });
       setProfileMsg({ kind: "success", text: "Nickname saved." });
     } catch (err) {
       const message = err instanceof Error ? err.message : "Could not save nickname.";
@@ -229,7 +229,7 @@ export default function AccountPage() {
     try {
       const res = await api.updateEmail(token, next, emailPassword);
       setToken(res.data.token);
-      setUser({ ...user, ...res.data.user });
+      setUser({ ...user, ...res.data.user, role: res.data.user.role as "user" | "admin" });
       setEmailPassword("");
       setEmailMsg({ kind: "success", text: "Email updated." });
     } catch (err) {
