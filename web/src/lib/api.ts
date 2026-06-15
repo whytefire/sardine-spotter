@@ -173,8 +173,6 @@ export const api = {
       body: JSON.stringify(data),
     }),
 
-  deleteSighting: (token: string, id: number) =>
-    apiFetch<ApiEnvelope<null>>(`/api/sightings/${id}`, { method: "DELETE", token }),
 
   // Comments
   getComments: (sightingId: number) =>
