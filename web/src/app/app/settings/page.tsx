@@ -14,6 +14,9 @@ import {
   FileText,
   Cookie,
   ShieldCheck,
+  Smartphone,
+  Share2,
+  PlusSquare,
 } from "lucide-react";
 import Link from "next/link";
 import { cn } from "@/lib/utils";
@@ -35,6 +38,23 @@ type PushState =
   | "unsubscribed"
   | "working";
 
+function useIsIOS() {
+  const [isIOS, setIsIOS] = useState(false);
+  const [isStandalone, setIsStandalone] = useState(false);
+  useEffect(() => {
+    const ios =
+      /iphone|ipad|ipod/i.test(navigator.userAgent) ||
+      (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
+    const standalone =
+      ("standalone" in navigator &&
+        (navigator as { standalone?: boolean }).standalone === true) ||
+      window.matchMedia("(display-mode: standalone)").matches;
+    setIsIOS(ios);
+    setIsStandalone(standalone);
+  }, []);
+  return { isIOS, isStandalone };
+}
+
 export default function SettingsPage() {
   const { user, token, logout } = useAuth();
   const router = useRouter();
@@ -44,6 +64,7 @@ export default function SettingsPage() {
   const isDark = mounted ? resolvedTheme === "dark" : false;
   const [pushState, setPushState] = useState<PushState>("checking");
   const [pushError, setPushError] = useState<string | null>(null);
+  const { isIOS, isStandalone } = useIsIOS();
 
   const refreshPushState = useCallback(async () => {
     if (typeof window === "undefined") return;
@@ -111,15 +132,17 @@ export default function SettingsPage() {
   const pushDescription =
     pushState === "checking"
       ? "Checking subscription…"
-      : pushState === "unsupported"
-        ? "Not supported on this browser"
-        : pushState === "denied"
-          ? "Blocked in browser settings"
-          : pushState === "subscribed"
-            ? "On — you'll get alerted for new sightings"
-            : pushState === "working"
-              ? "Updating…"
-              : "Get alerted for new sightings";
+      : pushState === "unsupported" && isIOS && !isStandalone
+        ? "Requires the app to be installed"
+        : pushState === "unsupported"
+          ? "Not supported on this browser"
+          : pushState === "denied"
+            ? "Blocked in browser settings"
+            : pushState === "subscribed"
+              ? "On — you'll get alerted for new sightings"
+              : pushState === "working"
+                ? "Updating…"
+                : "Get alerted for new sightings";
 
   const handleLogout = () => {
     logout();
@@ -177,6 +200,35 @@ export default function SettingsPage() {
           busy={pushState === "checking" || pushState === "working"}
         />
       </div>
+
+      {/* iOS install guide — only shown when on iOS Safari (not yet installed) */}
+      {isIOS && !isStandalone && pushState === "unsupported" && (
+        <div className="mb-4 rounded-2xl border border-ocean-200 dark:border-ocean-800/50 bg-ocean-50 dark:bg-ocean-950/20 p-4">
+          <div className="flex items-center gap-2 mb-3">
+            <Smartphone className="w-4 h-4 text-ocean-600 dark:text-ocean-400 shrink-0" />
+            <p className="font-semibold text-ocean-900 dark:text-ocean-200 text-sm">
+              Install SardineWatch on your iPhone
+            </p>
+          </div>
+          <p className="text-xs text-ocean-700 dark:text-ocean-300 mb-3 leading-relaxed">
+            Push notifications on iPhone require the app to be added to your home screen first. It only takes a few seconds:
+          </p>
+          <ol className="space-y-2.5">
+            <li className="flex items-center gap-3 text-xs text-ocean-800 dark:text-ocean-200">
+              <div className="w-6 h-6 rounded-full bg-ocean-600 dark:bg-ocean-700 text-white flex items-center justify-center font-bold shrink-0 text-[10px]">1</div>
+              <span>Tap the <Share2 className="w-3 h-3 inline mx-0.5" /> <strong>Share</strong> button at the bottom of Safari</span>
+            </li>
+            <li className="flex items-center gap-3 text-xs text-ocean-800 dark:text-ocean-200">
+              <div className="w-6 h-6 rounded-full bg-ocean-600 dark:bg-ocean-700 text-white flex items-center justify-center font-bold shrink-0 text-[10px]">2</div>
+              <span>Scroll down and tap <PlusSquare className="w-3 h-3 inline mx-0.5" /> <strong>Add to Home Screen</strong></span>
+            </li>
+            <li className="flex items-center gap-3 text-xs text-ocean-800 dark:text-ocean-200">
+              <div className="w-6 h-6 rounded-full bg-ocean-600 dark:bg-ocean-700 text-white flex items-center justify-center font-bold shrink-0 text-[10px]">3</div>
+              <span>Open SardineWatch from your home screen, then come back here to enable notifications</span>
+            </li>
+          </ol>
+        </div>
+      )}
 
       {pushError && (
         <div className="mb-4 rounded-2xl border border-coral-200 dark:border-coral-900/40 bg-coral-50 dark:bg-coral-950/20 p-3 flex items-start gap-2 text-sm text-coral-700 dark:text-coral-300">

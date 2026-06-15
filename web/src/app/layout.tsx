@@ -4,6 +4,7 @@ import { ThemeProvider } from "next-themes";
 import { AuthProvider } from "@/lib/auth-context";
 import { ServiceWorkerRegistrar } from "@/components/pwa/ServiceWorkerRegistrar";
 import { CookieNotice } from "@/components/pwa/CookieNotice";
+import { IOSInstallPrompt } from "@/components/pwa/IOSInstallPrompt";
 import "./globals.css";
 
 /**
@@ -161,6 +162,7 @@ export default function RootLayout({
           <AuthProvider>
             {children}
             <CookieNotice />
+            <IOSInstallPrompt />
           </AuthProvider>
         </ThemeProvider>
         <ServiceWorkerRegistrar />
