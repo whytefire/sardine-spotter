@@ -102,7 +102,14 @@ self.addEventListener("push", (event) => {
     self.registration.showNotification(
       data.title || "SardineWatch",
       options
-    )
+    ).then(() => {
+      // Set the app icon badge — count comes from payload if available,
+      // otherwise just show the dot (no number).
+      if ("setAppBadge" in self.navigator) {
+        const count = typeof data.badgeCount === "number" ? data.badgeCount : undefined;
+        return self.navigator.setAppBadge(count);
+      }
+    })
   );
 });
 
