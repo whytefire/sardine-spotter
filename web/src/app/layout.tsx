@@ -6,6 +6,7 @@ import { ServiceWorkerRegistrar } from "@/components/pwa/ServiceWorkerRegistrar"
 import { CookieNotice } from "@/components/pwa/CookieNotice";
 import { IOSInstallPrompt } from "@/components/pwa/IOSInstallPrompt";
 import { BadgeClearer } from "@/components/pwa/BadgeClearer";
+import { Analytics } from "@vercel/analytics/next";
 import "./globals.css";
 
 /**
@@ -168,6 +169,7 @@ export default function RootLayout({
         </ThemeProvider>
         <ServiceWorkerRegistrar />
         <BadgeClearer />
+        <Analytics />
       </body>
     </html>
   );
