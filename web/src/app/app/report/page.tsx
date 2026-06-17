@@ -277,18 +277,28 @@ export default function ReportPage() {
 
         {/* Location */}
         <div>
-          <label className="block text-sm font-semibold text-deep-700 dark:text-deep-200 mb-3">
-            Location
-          </label>
+          <div className="flex items-center justify-between mb-1.5">
+            <label className="block text-sm font-semibold text-deep-700 dark:text-deep-200">
+              Location <span className="text-coral-500">*</span>
+            </label>
+            {!coords && (
+              <span className="text-xs text-coral-500 font-medium">Required to submit</span>
+            )}
+          </div>
+          {!coords && (
+            <p className="text-xs text-deep-500 dark:text-deep-400 mb-2">
+              Tap the button below to share where you spotted the sardines.
+            </p>
+          )}
           <button
             type="button"
             onClick={requestLocation}
             disabled={locationStatus === "requesting"}
             className={cn(
-              "w-full flex items-center gap-3 p-4 rounded-xl border-2 transition-all text-left",
+              "w-full flex items-center gap-3 p-4 rounded-xl border-2 transition-all text-left cursor-pointer",
               coords
                 ? "border-ocean-500 bg-ocean-50 dark:bg-ocean-900/20"
-                : "border-deep-200 dark:border-deep-700 bg-white dark:bg-deep-800 hover:border-ocean-300 dark:hover:border-ocean-600"
+                : "border-coral-300 dark:border-coral-700 bg-white dark:bg-deep-800 hover:border-ocean-400 dark:hover:border-ocean-500 hover:bg-ocean-50 dark:hover:bg-ocean-900/10"
             )}
           >
             {locationStatus === "requesting" ? (
@@ -296,7 +306,7 @@ export default function ReportPage() {
             ) : coords ? (
               <CheckCircle2 className="w-5 h-5 text-sea-green-500 shrink-0" />
             ) : (
-              <Navigation className="w-5 h-5 text-deep-500 dark:text-deep-400 shrink-0" />
+              <Navigation className="w-5 h-5 text-coral-500 shrink-0" />
             )}
             <div className="flex-1 min-w-0">
               <p
@@ -304,19 +314,19 @@ export default function ReportPage() {
                   "font-semibold text-sm",
                   coords
                     ? "text-deep-950 dark:text-white"
-                    : "text-deep-700 dark:text-deep-200"
+                    : "text-coral-600 dark:text-coral-400"
                 )}
               >
                 {locationStatus === "requesting"
                   ? "Getting your location…"
                   : coords
-                    ? "Location captured"
-                    : "Use my current location"}
+                    ? "Location captured ✓"
+                    : "Tap here to use my current location"}
               </p>
               <p className="text-xs text-deep-500 dark:text-deep-400 mt-0.5 truncate">
                 {coords
                   ? `${coords.lat.toFixed(5)}°, ${coords.lng.toFixed(5)}°`
-                  : "Tap to share your GPS coordinates"}
+                  : "We need your GPS coordinates to pin the sighting on the map"}
               </p>
             </div>
             {coords && (
