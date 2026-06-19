@@ -2,9 +2,9 @@
   "relation": ["delegate_permission/common.handle_all_urls"],
   "target": {
     "namespace": "android_app",
-    "package_name": "co.za.sardinewatch.app",
+    "package_name": "za.co.sardinewatch.twa",
     "sha256_cert_fingerprints": [
-      "TODO: replace with your Play Store signing key SHA256 fingerprint"
+      "A1:29:1E:2E:29:84:26:F6:41:85:C4:63:C9:27:25:82:BE:45:32:6B:8E:27:94:7B:57:3C:42:54:6F:F2:DD:45"
     ]
   }
 }]
