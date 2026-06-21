@@ -270,7 +270,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
               transition={{ type: "spring", damping: 25, stiffness: 250 }}
               className="fixed left-0 top-0 bottom-0 w-72 glass z-50 lg:hidden flex flex-col border-r border-white/10"
             >
-              <div className="h-16 flex items-center justify-between px-6 border-b border-white/10 dark:border-deep-800">
+              <div className="h-16 flex items-center justify-between px-6 border-b border-white/10 dark:border-deep-800" style={{ paddingTop: "env(safe-area-inset-top)" }}>
                 <Link
                   href="/app"
                   className="flex items-center gap-2.5"
@@ -339,7 +339,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
       {/* Main content */}
       <div className="flex-1 flex flex-col min-w-0">
         {/* Mobile header */}
-        <header className="lg:hidden h-14 bg-white/90 dark:bg-deep-950/90 backdrop-blur-xl border-b border-deep-200/60 dark:border-deep-800 flex items-center justify-between px-4 sticky top-0 z-30 shadow-sm">
+        <header className="lg:hidden h-14 bg-white/90 dark:bg-deep-950/90 backdrop-blur-xl border-b border-deep-200/60 dark:border-deep-800 flex items-center justify-between px-4 sticky top-0 z-30 shadow-sm" style={{ paddingTop: "env(safe-area-inset-top)" }}>
           <button
             onClick={() => setSidebarOpen(true)}
             className="p-2 -ml-2 text-deep-500 dark:text-deep-300 hover:text-deep-700 dark:hover:text-deep-100 rounded-lg min-h-[44px] min-w-[44px] flex items-center justify-center"
@@ -376,7 +376,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
         </main>
 
         {/* Mobile bottom nav */}
-        <nav aria-label="Mobile navigation" className="lg:hidden bg-white/90 dark:bg-deep-950/90 backdrop-blur-xl border-t border-surface-200 dark:border-deep-800 flex items-center justify-around py-2 px-1 sticky bottom-0 z-30">
+        <nav aria-label="Mobile navigation" className="lg:hidden bg-white/90 dark:bg-deep-950/90 backdrop-blur-xl border-t border-surface-200 dark:border-deep-800 flex items-center justify-around py-2 px-1 sticky bottom-0 z-30" style={{ paddingBottom: "max(0.5rem, env(safe-area-inset-bottom))" }}>
           {navItems.map((item) => {
             const isActive = pathname === item.href;
             const isReport = item.label === "Report";
