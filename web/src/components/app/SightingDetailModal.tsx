@@ -12,6 +12,7 @@ import {
   Fish,
   Trash2,
   Navigation,
+  ChevronRight,
 } from "lucide-react";
 import Link from "next/link";
 import { cn, timeAgo, formatDistance } from "@/lib/utils";
@@ -21,6 +22,36 @@ import { useAuth } from "@/lib/auth-context";
 import { Avatar } from "@/components/ui/avatar";
 import { ModerationMenu } from "@/components/app/ModerationMenu";
 import type { Sighting, Comment } from "@/lib/types";
+
+interface DirectionsOption {
+  label: string;
+  icon: string;
+  url: (lat: number, lng: number) => string;
+  color: string;
+}
+
+const DIRECTIONS_APPS: DirectionsOption[] = [
+  {
+    label: "Apple Maps",
+    icon: "🗺️",
+    url: (lat, lng) => `https://maps.apple.com/?daddr=${lat},${lng}&dirflg=d`,
+    color: "bg-gray-100 dark:bg-deep-700",
+  },
+  {
+    label: "Google Maps",
+    icon: "📍",
+    url: (lat, lng) =>
+      `https://www.google.com/maps/dir/?api=1&destination=${lat},${lng}`,
+    color: "bg-blue-50 dark:bg-blue-950/30",
+  },
+  {
+    label: "Waze",
+    icon: "🚗",
+    url: (lat, lng) =>
+      `https://waze.com/ul?ll=${lat},${lng}&navigate=yes`,
+    color: "bg-cyan-50 dark:bg-cyan-950/30",
+  },
+];
 
 interface SightingDetailModalProps {
   sighting: Sighting | null;
@@ -47,6 +78,7 @@ export function SightingDetailModal({
   const [likeCount, setLikeCount] = useState(0);
   const [likeBusy, setLikeBusy] = useState(false);
   const [deleting, setDeleting] = useState(false);
+  const [directionsOpen, setDirectionsOpen] = useState(false);
   const commentsEndRef = useRef<HTMLDivElement | null>(null);
 
   const loadComments = useCallback(async (sightingId: number) => {
@@ -262,12 +294,66 @@ export function SightingDetailModal({
                     {sighting.description}
                   </p>
 
-                  <div className="flex items-center gap-2 text-xs text-deep-500 dark:text-deep-400 font-medium">
-                    <MapPin className="w-3.5 h-3.5" />
-                    <span>
-                      {sighting.latitude.toFixed(4)}°, {sighting.longitude.toFixed(4)}°
-                    </span>
+                  <div className="flex items-center justify-between gap-2">
+                    <div className="flex items-center gap-2 text-xs text-deep-500 dark:text-deep-400 font-medium">
+                      <MapPin className="w-3.5 h-3.5 shrink-0" />
+                      <span>
+                        {sighting.latitude.toFixed(4)}°, {sighting.longitude.toFixed(4)}°
+                      </span>
+                    </div>
+                    <button
+                      onClick={() => setDirectionsOpen(true)}
+                      className="inline-flex items-center gap-1.5 text-xs font-semibold text-white bg-gradient-to-r from-ocean-500 to-teal-500 hover:brightness-110 px-3 py-1.5 rounded-lg shadow-sm transition-all min-h-[36px]"
+                    >
+                      <Navigation className="w-3.5 h-3.5" />
+                      Get Directions
+                    </button>
                   </div>
+
+                  {/* Directions picker */}
+                  <AnimatePresence>
+                    {directionsOpen && (
+                      <motion.div
+                        initial={{ opacity: 0, y: 8 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        exit={{ opacity: 0, y: 8 }}
+                        transition={{ duration: 0.18 }}
+                        className="rounded-2xl border border-deep-200 dark:border-deep-700 overflow-hidden shadow-lg"
+                      >
+                        <div className="flex items-center justify-between px-4 py-2.5 bg-deep-50 dark:bg-deep-800 border-b border-deep-200 dark:border-deep-700">
+                          <span className="text-xs font-semibold text-deep-600 dark:text-deep-300 uppercase tracking-wider">
+                            Open in…
+                          </span>
+                          <button
+                            onClick={() => setDirectionsOpen(false)}
+                            className="text-deep-400 hover:text-deep-600 dark:hover:text-deep-200 p-1 rounded-md"
+                            aria-label="Close directions picker"
+                          >
+                            <X className="w-3.5 h-3.5" />
+                          </button>
+                        </div>
+                        {DIRECTIONS_APPS.map((app) => (
+                          <a
+                            key={app.label}
+                            href={app.url(sighting.latitude, sighting.longitude)}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            onClick={() => setDirectionsOpen(false)}
+                            className={cn(
+                              "flex items-center gap-3 px-4 py-3.5 transition-colors hover:brightness-95 border-b border-deep-100 dark:border-deep-700 last:border-0",
+                              app.color
+                            )}
+                          >
+                            <span className="text-xl leading-none">{app.icon}</span>
+                            <span className="flex-1 text-sm font-semibold text-deep-900 dark:text-white">
+                              {app.label}
+                            </span>
+                            <ChevronRight className="w-4 h-4 text-deep-400 dark:text-deep-500" />
+                          </a>
+                        ))}
+                      </motion.div>
+                    )}
+                  </AnimatePresence>
 
                   <div className="flex items-center gap-4 pt-2 border-t border-deep-100 dark:border-deep-800">
                     <button
