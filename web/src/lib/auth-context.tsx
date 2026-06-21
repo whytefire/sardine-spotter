@@ -21,11 +21,14 @@ export interface User {
   lastActive?: string;
 }
 
+const REMEMBER_EXPIRY_KEY = "ss_token_expiry";
+const REMEMBER_DAYS = 30;
+
 interface AuthContextType {
   user: User | null;
   token: string | null;
   loading: boolean;
-  login: (email: string, password: string) => Promise<void>;
+  login: (email: string, password: string, rememberMe?: boolean) => Promise<void>;
   register: (
     email: string,
     password: string,
@@ -48,7 +51,19 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    const saved = localStorage.getItem("ss_token");
+    // Check remembered token (localStorage) first, then session token
+    const expiry = localStorage.getItem(REMEMBER_EXPIRY_KEY);
+    const saved =
+      expiry && Date.now() < Number(expiry)
+        ? localStorage.getItem("ss_token")
+        : sessionStorage.getItem("ss_token");
+
+    // Clean up expired remembered token
+    if (expiry && Date.now() >= Number(expiry)) {
+      localStorage.removeItem("ss_token");
+      localStorage.removeItem(REMEMBER_EXPIRY_KEY);
+    }
+
     if (saved) {
       setToken(saved);
       api
@@ -59,6 +74,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         })
         .catch(() => {
           localStorage.removeItem("ss_token");
+          localStorage.removeItem(REMEMBER_EXPIRY_KEY);
+          sessionStorage.removeItem("ss_token");
           setToken(null);
         })
         .finally(() => setLoading(false));
@@ -67,11 +84,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   }, []);
 
-  const login = useCallback(async (email: string, password: string) => {
-    const res = (await api.login(email, password)) as {
+  const login = useCallback(async (email: string, password: string, rememberMe = false) => {
+    const res = (await api.login(email, password, rememberMe)) as {
       data: { token: string; user: User };
     };
-    localStorage.setItem("ss_token", res.data.token);
+    if (rememberMe) {
+      const expiry = Date.now() + REMEMBER_DAYS * 24 * 60 * 60 * 1000;
+      localStorage.setItem("ss_token", res.data.token);
+      localStorage.setItem(REMEMBER_EXPIRY_KEY, String(expiry));
+    } else {
+      sessionStorage.setItem("ss_token", res.data.token);
+    }
     setToken(res.data.token);
     setUser(res.data.user);
   }, []);
@@ -81,7 +104,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       const res = (await api.register(email, password, nickname)) as {
         data: { token: string; user: User };
       };
-      localStorage.setItem("ss_token", res.data.token);
+      sessionStorage.setItem("ss_token", res.data.token);
       setToken(res.data.token);
       setUser(res.data.user);
     },
@@ -90,6 +113,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const logout = useCallback(() => {
     localStorage.removeItem("ss_token");
+    localStorage.removeItem(REMEMBER_EXPIRY_KEY);
+    sessionStorage.removeItem("ss_token");
     setToken(null);
     setUser(null);
   }, []);
@@ -105,7 +130,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, [token]);
 
   const persistToken = useCallback((next: string) => {
-    localStorage.setItem("ss_token", next);
+    // Preserve whichever storage was used for the original login
+    if (localStorage.getItem(REMEMBER_EXPIRY_KEY)) {
+      localStorage.setItem("ss_token", next);
+    } else {
+      sessionStorage.setItem("ss_token", next);
+    }
     setToken(next);
   }, []);
 

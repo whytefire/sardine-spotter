@@ -59,7 +59,7 @@ router.post("/register", async (req: Request, res: Response) => {
 
 router.post("/login", async (req: Request, res: Response) => {
   try {
-    const { email, password } = req.body;
+    const { email, password, rememberMe } = req.body;
 
     if (!email || !password) {
       res.status(400).json({ error: "Email and password are required" });
@@ -110,7 +110,7 @@ router.post("/login", async (req: Request, res: Response) => {
       userId: user.id,
       email: user.email,
       role: user.role,
-    });
+    }, !!rememberMe);
 
     res.json({
       success: true,

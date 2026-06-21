@@ -95,8 +95,9 @@ export function authenticateOptional(
   next();
 }
 
-export function generateToken(payload: AuthPayload): string {
-  const expiresIn = (process.env.JWT_EXPIRES_IN || "7d") as jwt.SignOptions["expiresIn"];
+export function generateToken(payload: AuthPayload, rememberMe = false): string {
+  const defaultExpiry = process.env.JWT_EXPIRES_IN || "7d";
+  const expiresIn = (rememberMe ? "30d" : defaultExpiry) as jwt.SignOptions["expiresIn"];
   return jwt.sign(payload, process.env.JWT_SECRET || "fallback-secret", {
     expiresIn,
   });

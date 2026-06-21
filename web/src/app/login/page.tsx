@@ -16,6 +16,7 @@ function LoginForm() {
   const [showPassword, setShowPassword] = useState(false);
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [rememberMe, setRememberMe] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [banReason, setBanReason] = useState<string | null>(null);
@@ -33,7 +34,7 @@ function LoginForm() {
     setLoading(true);
 
     try {
-      await login(email, password);
+      await login(email, password, rememberMe);
       router.push("/app");
     } catch (err: unknown) {
       if (err instanceof Error) {
@@ -172,6 +173,30 @@ function LoginForm() {
                   {showPassword ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
                 </button>
               </div>
+            </div>
+
+            <div className="flex items-center justify-between">
+              <label className="flex items-center gap-2.5 cursor-pointer group">
+                <div className="relative">
+                  <input
+                    type="checkbox"
+                    id="rememberMe"
+                    checked={rememberMe}
+                    onChange={(e) => setRememberMe(e.target.checked)}
+                    className="sr-only peer"
+                  />
+                  <div className="w-4 h-4 rounded border-2 border-deep-300 dark:border-deep-600 bg-white dark:bg-deep-800 peer-checked:bg-ocean-500 peer-checked:border-ocean-500 transition-all flex items-center justify-center">
+                    {rememberMe && (
+                      <svg className="w-2.5 h-2.5 text-white" viewBox="0 0 10 8" fill="none">
+                        <path d="M1 4l3 3 5-6" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+                      </svg>
+                    )}
+                  </div>
+                </div>
+                <span className="text-sm text-deep-600 dark:text-deep-400 select-none">
+                  Remember me for 30 days
+                </span>
+              </label>
             </div>
 
             <Button

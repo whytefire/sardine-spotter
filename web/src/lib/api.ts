@@ -46,10 +46,10 @@ async function apiFetch<T>(endpoint: string, options: FetchOptions = {}): Promis
 
 export const api = {
   // Auth
-  login: (email: string, password: string) =>
+  login: (email: string, password: string, rememberMe = false) =>
     apiFetch("/api/auth/login", {
       method: "POST",
-      body: JSON.stringify({ email, password }),
+      body: JSON.stringify({ email, password, rememberMe }),
     }),
 
   register: (email: string, password: string, nickname: string) =>
