@@ -268,9 +268,9 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
               animate={{ x: 0 }}
               exit={{ x: -300 }}
               transition={{ type: "spring", damping: 25, stiffness: 250 }}
-              className="fixed left-0 top-0 bottom-0 w-72 glass z-50 lg:hidden flex flex-col border-r border-white/10"
+              className="fixed left-0 top-0 bottom-0 w-72 glass-light z-50 lg:hidden flex flex-col border-r border-deep-200/60 dark:border-deep-800"
             >
-              <div className="border-b border-white/10 dark:border-deep-800" style={{ paddingTop: "env(safe-area-inset-top)" }}>
+              <div className="border-b border-deep-200/60 dark:border-deep-800" style={{ paddingTop: "env(safe-area-inset-top)" }}>
                 <div className="h-16 flex items-center justify-between px-6">
                 <Link
                   href="/app"
@@ -303,7 +303,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
                         "flex items-center gap-3 px-3 py-3 rounded-xl text-base font-medium transition-all relative",
                         isActive
                           ? "bg-ocean-500/10 text-ocean-600 dark:text-ocean-400"
-                          : "text-deep-500 dark:text-deep-300 hover:bg-white/10"
+                          : "text-deep-500 dark:text-deep-300 hover:bg-deep-100 dark:hover:bg-white/10"
                       )}
                     >
                       {isActive && (
@@ -320,10 +320,10 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
                   );
                 })}
               </nav>
-              <div className="px-5 py-3 border-t border-white/10 dark:border-deep-800">
+              <div className="px-5 py-3 border-t border-deep-200/60 dark:border-deep-800">
                 <button
                   onClick={() => setTheme(isDark ? "light" : "dark")}
-                  className="flex items-center gap-2 px-3 py-2 rounded-xl text-sm text-deep-400 dark:text-deep-300 hover:bg-white/10 transition-colors w-full"
+                  className="flex items-center gap-2 px-3 py-2 rounded-xl text-sm text-deep-500 dark:text-deep-300 hover:bg-deep-100 dark:hover:bg-white/10 transition-colors w-full"
                 >
                   {isDark ? (
                     <Sun className="w-4 h-4 text-sunset-500" />
