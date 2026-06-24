@@ -61,6 +61,18 @@ export const api = {
   getMe: (token: string) =>
     apiFetch("/api/auth/me", { token }),
 
+  forgotPassword: (email: string) =>
+    apiFetch("/api/auth/forgot-password", {
+      method: "POST",
+      body: JSON.stringify({ email }),
+    }),
+
+  resetPassword: (token: string, password: string) =>
+    apiFetch("/api/auth/reset-password", {
+      method: "POST",
+      body: JSON.stringify({ token, password }),
+    }),
+
   /**
    * POPIA right of access — downloads the full personal-data dump as a JSON
    * file. Returns the parsed payload AND triggers a browser file download so

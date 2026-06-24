@@ -1,7 +1,11 @@
 import { Router, Request, Response } from "express";
 import bcrypt from "bcryptjs";
+import crypto from "crypto";
 import { getPool } from "../config/database";
 import { generateToken, authenticate, AuthRequest } from "../middleware/auth";
+import { Resend } from "resend";
+
+const resend = new Resend(process.env.RESEND_API_KEY);
 
 const router = Router();
 
@@ -618,6 +622,135 @@ router.get("/me", authenticate, async (req: AuthRequest, res: Response) => {
   } catch (err) {
     console.error("Get user error:", err);
     res.status(500).json({ error: "Failed to get user" });
+  }
+});
+
+// ── Forgot password ──────────────────────────────────────────────────────────
+router.post("/forgot-password", async (req: Request, res: Response) => {
+  try {
+    const { email } = req.body ?? {};
+    if (!email) {
+      res.status(400).json({ error: "Email is required" });
+      return;
+    }
+
+    const pool = await getPool();
+    const result = await pool
+      .request()
+      .input("email", email)
+      .query("SELECT id, email, nickname FROM Users WHERE email = @email AND is_active = 1");
+
+    // Always return success — don't reveal whether the email exists
+    if (result.recordset.length === 0) {
+      res.json({ success: true });
+      return;
+    }
+
+    const user = result.recordset[0];
+
+    // Generate a cryptographically random token and store its hash
+    const rawToken = crypto.randomBytes(32).toString("hex");
+    const tokenHash = crypto.createHash("sha256").update(rawToken).digest("hex");
+    const expiresAt = new Date(Date.now() + 60 * 60 * 1000); // 1 hour
+
+    // Invalidate any existing unused tokens for this user
+    await pool
+      .request()
+      .input("userId", user.id)
+      .query("DELETE FROM PasswordResetTokens WHERE user_id = @userId AND used_at IS NULL");
+
+    await pool
+      .request()
+      .input("userId", user.id)
+      .input("tokenHash", tokenHash)
+      .input("expiresAt", expiresAt)
+      .query(
+        "INSERT INTO PasswordResetTokens (user_id, token_hash, expires_at) VALUES (@userId, @tokenHash, @expiresAt)"
+      );
+
+    const resetUrl = `${process.env.FRONTEND_URL || "https://sardinewatch.co.za"}/reset-password?token=${rawToken}`;
+
+    await resend.emails.send({
+      from: "SardineWatch <noreply@sardinewatch.co.za>",
+      to: user.email,
+      subject: "Reset your SardineWatch password",
+      html: `
+        <div style="font-family: sans-serif; max-width: 480px; margin: 0 auto; padding: 32px 24px; background: #f8fafc; border-radius: 16px;">
+          <div style="text-align: center; margin-bottom: 24px;">
+            <h1 style="color: #0e7490; font-size: 24px; margin: 0;">🐟 SardineWatch</h1>
+          </div>
+          <h2 style="color: #1e293b; font-size: 20px;">Reset your password</h2>
+          <p style="color: #475569;">Hi ${user.nickname},</p>
+          <p style="color: #475569;">We received a request to reset your password. Click the button below to choose a new one. This link expires in <strong>1 hour</strong>.</p>
+          <div style="text-align: center; margin: 32px 0;">
+            <a href="${resetUrl}" style="display: inline-block; background: #0e7490; color: white; text-decoration: none; padding: 14px 32px; border-radius: 12px; font-weight: 600; font-size: 16px;">Reset Password</a>
+          </div>
+          <p style="color: #94a3b8; font-size: 13px;">If you didn't request this, you can safely ignore this email — your password won't change.</p>
+          <hr style="border: none; border-top: 1px solid #e2e8f0; margin: 24px 0;" />
+          <p style="color: #cbd5e1; font-size: 12px; text-align: center;">SardineWatch · sardinewatch.co.za</p>
+        </div>
+      `,
+    });
+
+    res.json({ success: true });
+  } catch (err) {
+    console.error("Forgot password error:", err);
+    res.status(500).json({ error: "Failed to send reset email" });
+  }
+});
+
+// ── Reset password ────────────────────────────────────────────────────────────
+router.post("/reset-password", async (req: Request, res: Response) => {
+  try {
+    const { token, password } = req.body ?? {};
+    if (!token || !password) {
+      res.status(400).json({ error: "Token and new password are required" });
+      return;
+    }
+    if (password.length < 8) {
+      res.status(400).json({ error: "Password must be at least 8 characters" });
+      return;
+    }
+
+    const tokenHash = crypto.createHash("sha256").update(token).digest("hex");
+    const pool = await getPool();
+
+    const result = await pool
+      .request()
+      .input("tokenHash", tokenHash)
+      .input("now", new Date())
+      .query(
+        `SELECT t.id, t.user_id FROM PasswordResetTokens t
+         WHERE t.token_hash = @tokenHash
+           AND t.expires_at > @now
+           AND t.used_at IS NULL`
+      );
+
+    if (result.recordset.length === 0) {
+      res.status(400).json({ error: "This reset link is invalid or has expired." });
+      return;
+    }
+
+    const { id: tokenId, user_id: userId } = result.recordset[0];
+    const hashedPassword = await bcrypt.hash(password, 12);
+
+    await pool
+      .request()
+      .input("password", hashedPassword)
+      .input("userId", userId)
+      .query("UPDATE Users SET password = @password WHERE id = @userId");
+
+    // Mark token as used
+    await pool
+      .request()
+      .input("tokenId", tokenId)
+      .input("usedAt", new Date())
+      .query("UPDATE PasswordResetTokens SET used_at = @usedAt WHERE id = @tokenId");
+
+    res.json({ success: true });
+  } catch (err) {
+    console.error("Reset password error:", err);
+    res.status(500).json({ error: "Failed to reset password" });
   }
 });
 

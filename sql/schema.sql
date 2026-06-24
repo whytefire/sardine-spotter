@@ -288,6 +288,23 @@ IF NOT EXISTS (SELECT 1 FROM sys.columns
     ALTER TABLE Users ADD ban_reason NVARCHAR(500) NULL;
 GO
 
+-- 2026-06-24: password reset tokens
+IF NOT EXISTS (SELECT * FROM sys.tables WHERE name = 'PasswordResetTokens')
+CREATE TABLE PasswordResetTokens (
+    id          INT IDENTITY(1,1) PRIMARY KEY,
+    user_id     INT             NOT NULL REFERENCES Users(id) ON DELETE CASCADE,
+    token_hash  NVARCHAR(128)   NOT NULL UNIQUE,   -- SHA-256 hex of the raw token
+    expires_at  DATETIME        NOT NULL,
+    used_at     DATETIME        NULL,              -- set when consumed; prevents reuse
+    created_at  DATETIME        NOT NULL DEFAULT GETDATE()
+);
+GO
+
+CREATE NONCLUSTERED INDEX IX_PasswordResetTokens_Hash
+    ON PasswordResetTokens (token_hash)
+    INCLUDE (user_id, expires_at, used_at);
+GO
+
 PRINT '=== SardineWatch schema ready ===';
 PRINT 'Admin login: admin@sardinespotter.com / Admin@2026!';
 GO
