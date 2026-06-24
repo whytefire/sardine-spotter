@@ -66,12 +66,19 @@ export default function ForgotPasswordPage() {
               <p className="text-deep-500 dark:text-deep-400 mb-6">
                 If <span className="font-semibold text-deep-700 dark:text-deep-200">{email}</span> is registered, you&apos;ll receive a reset link shortly. Check your spam folder if it doesn&apos;t arrive.
               </p>
-              <Link href="/login">
-                <Button variant="outline" className="w-full rounded-xl">
-                  <ArrowLeft className="w-4 h-4" />
-                  Back to Login
-                </Button>
-              </Link>
+              <div className="space-y-3">
+                <a href="mailto:" className="block">
+                  <Button className="w-full rounded-xl">
+                    Open Mail App
+                  </Button>
+                </a>
+                <Link href="/login" className="block">
+                  <Button variant="outline" className="w-full rounded-xl">
+                    <ArrowLeft className="w-4 h-4" />
+                    Back to Login
+                  </Button>
+                </Link>
+              </div>
             </motion.div>
           ) : (
             <>
