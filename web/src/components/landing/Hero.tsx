@@ -180,6 +180,27 @@ export default function Hero() {
             </Link>
           </motion.div>
 
+          {/* Store badges */}
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.6, delay: 0.4 }}
+            className="mt-6 flex items-center justify-center gap-3 flex-wrap"
+          >
+            <a
+              href="https://play.google.com/store/apps/details?id=za.co.sardinewatch.twa"
+              target="_blank"
+              rel="noopener noreferrer"
+              aria-label="Get it on Google Play"
+            >
+              <img
+                src="https://play.google.com/intl/en_us/badges/static/images/badges/en_badge_web_generic.png"
+                alt="Get it on Google Play"
+                className="h-14 w-auto hover:opacity-90 transition-opacity drop-shadow-lg"
+              />
+            </a>
+          </motion.div>
+
           {/* Stats bar */}
           <motion.div
             initial={{ opacity: 0, y: 30 }}

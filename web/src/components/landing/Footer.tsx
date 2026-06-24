@@ -47,6 +47,20 @@ export default function Footer() {
                 </li>
               ))}
             </ul>
+            <div className="mt-6">
+              <a
+                href="https://play.google.com/store/apps/details?id=za.co.sardinewatch.twa"
+                target="_blank"
+                rel="noopener noreferrer"
+                aria-label="Get it on Google Play"
+              >
+                <img
+                  src="https://play.google.com/intl/en_us/badges/static/images/badges/en_badge_web_generic.png"
+                  alt="Get it on Google Play"
+                  className="h-10 w-auto opacity-80 hover:opacity-100 transition-opacity"
+                />
+              </a>
+            </div>
           </div>
 
           {/* Info links */}

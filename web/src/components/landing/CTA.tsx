@@ -76,15 +76,20 @@ export default function CTA() {
                   <ArrowRight className="w-5 h-5" />
                 </Button>
               </Link>
-              <Link href="/about">
-                <Button
-                  size="lg"
-                  variant="outline"
-                  className="text-lg rounded-2xl px-8 border-white/30 text-white hover:bg-white/10 hover:border-white/50"
-                >
-                  Learn More
-                </Button>
-              </Link>
+            </div>
+            <div className="mt-6 flex items-center justify-center">
+              <a
+                href="https://play.google.com/store/apps/details?id=za.co.sardinewatch.twa"
+                target="_blank"
+                rel="noopener noreferrer"
+                aria-label="Get it on Google Play"
+              >
+                <img
+                  src="https://play.google.com/intl/en_us/badges/static/images/badges/en_badge_web_generic.png"
+                  alt="Get it on Google Play"
+                  className="h-14 w-auto hover:opacity-90 transition-opacity drop-shadow-lg"
+                />
+              </a>
             </div>
           </div>
         </motion.div>
