@@ -69,7 +69,7 @@ export const metadata: Metadata = {
       "Free community app for tracking South Africa's annual sardine run. Real-time sightings, GPS reports, and instant push alerts.",
     images: [
       {
-        url: "/og-image.jpg",
+        url: "/og-image.png",
         width: 1200,
         height: 630,
         alt: "SardineWatch — Track the KZN Sardine Run Live",
@@ -81,7 +81,7 @@ export const metadata: Metadata = {
     title: "SardineWatch — Track the KZN Sardine Run Live",
     description:
       "Free community app for real-time sardine run tracking along South Africa's east coast.",
-    images: ["/og-image.jpg"],
+    images: ["/og-image.png"],
   },
   robots: {
     index: true,
