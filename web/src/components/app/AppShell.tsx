@@ -320,7 +320,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
                   );
                 })}
               </nav>
-              <div className="px-5 py-3 border-t border-deep-200/60 dark:border-deep-800">
+              <div className="px-5 py-3 border-t border-deep-200/60 dark:border-deep-800 space-y-2">
                 <button
                   onClick={() => setTheme(isDark ? "light" : "dark")}
                   className="flex items-center gap-2 px-3 py-2 rounded-xl text-sm text-deep-500 dark:text-deep-300 hover:bg-deep-100 dark:hover:bg-white/10 transition-colors w-full"
@@ -332,6 +332,19 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
                   )}
                   <span>{isDark ? "Light Mode" : "Dark Mode"}</span>
                 </button>
+                <a
+                  href="https://play.google.com/store/apps/details?id=za.co.sardinewatch.twa"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  aria-label="Get it on Google Play"
+                  className="block px-3"
+                >
+                  <img
+                    src="https://play.google.com/intl/en_us/badges/static/images/badges/en_badge_web_generic.png"
+                    alt="Get it on Google Play"
+                    className="h-9 w-auto opacity-70 hover:opacity-100 transition-opacity"
+                  />
+                </a>
               </div>
             </motion.aside>
           </>
