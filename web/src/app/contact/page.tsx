@@ -8,6 +8,7 @@ import Link from "next/link";
 import { motion } from "framer-motion";
 import Navbar from "@/components/landing/Navbar";
 import Footer from "@/components/landing/Footer";
+import { api } from "@/lib/api";
 
 export default function ContactPage() {
   const [name, setName] = useState("");
@@ -22,18 +23,7 @@ export default function ContactPage() {
     setError("");
     setLoading(true);
     try {
-      const res = await fetch(
-        `${process.env.NEXT_PUBLIC_API_URL}/api/contact`,
-        {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ name, email, message }),
-        }
-      );
-      if (!res.ok) {
-        const data = await res.json();
-        throw new Error(data.error || "Failed to send message");
-      }
+      await api.sendContactMessage(name, email, message);
       setSent(true);
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : "Something went wrong. Please try again.");

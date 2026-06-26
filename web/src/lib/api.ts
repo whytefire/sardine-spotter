@@ -67,6 +67,12 @@ export const api = {
       body: JSON.stringify({ email }),
     }),
 
+  sendContactMessage: (name: string, email: string, message: string) =>
+    apiFetch("/api/contact", {
+      method: "POST",
+      body: JSON.stringify({ name, email, message }),
+    }),
+
   resetPassword: (token: string, password: string) =>
     apiFetch("/api/auth/reset-password", {
       method: "POST",
