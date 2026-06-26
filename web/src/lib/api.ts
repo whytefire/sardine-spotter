@@ -162,6 +162,17 @@ export const api = {
       { method: "DELETE", token }
     ),
 
+  /** Edit a sighting's description, photo, or category. Owner or admin only. No push notification sent. */
+  editSighting: (
+    token: string,
+    id: number,
+    fields: { description?: string; photoUrl?: string | null; category?: string }
+  ) =>
+    apiFetch<ApiEnvelope<{ id: number; description: string; photoUrl: string | null; category: string }>>(
+      `/api/sightings/${id}`,
+      { method: "PUT", token, body: JSON.stringify(fields) }
+    ),
+
   /** Pins or unpins a sighting. Admin only. */
   pinSighting: (token: string, id: number, pinned: boolean) =>
     apiFetch<ApiEnvelope<{ isPinned: boolean }>>(`/api/sightings/${id}/pin`, {

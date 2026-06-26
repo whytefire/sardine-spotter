@@ -160,6 +160,91 @@ router.post("/", authenticate, async (req: AuthRequest, res: Response) => {
   }
 });
 
+/**
+ * Edit a sighting's description, photo, or category.
+ * Allowed for the original reporter and for admins.
+ * Deliberately does NOT send any push notifications.
+ */
+router.put("/:id", authenticate, async (req: AuthRequest, res: Response) => {
+  try {
+    const sightingId = Number(req.params.id);
+    if (!Number.isFinite(sightingId)) {
+      res.status(400).json({ error: "Invalid sighting id" });
+      return;
+    }
+
+    const pool = await getPool();
+
+    const check = await pool
+      .request()
+      .input("id", sightingId)
+      .query("SELECT id, user_id FROM Sightings WHERE id = @id AND is_active = 1");
+
+    if (check.recordset.length === 0) {
+      res.status(404).json({ error: "Sighting not found" });
+      return;
+    }
+
+    const isOwner = check.recordset[0].user_id === req.user!.userId;
+    const isAdmin = req.user!.role === "admin";
+
+    if (!isOwner && !isAdmin) {
+      res.status(403).json({ error: "Not authorized to edit this sighting" });
+      return;
+    }
+
+    const { description, photoUrl, category } = req.body;
+
+    if (description !== undefined && description.trim().length < 10) {
+      res.status(400).json({ error: "Description must be at least 10 characters" });
+      return;
+    }
+
+    // Build SET clause only for fields that were actually provided
+    const setParts: string[] = [];
+    const req2 = pool.request().input("id", sightingId);
+
+    if (description !== undefined) {
+      setParts.push("description = @description");
+      req2.input("description", description.trim());
+    }
+    if (photoUrl !== undefined) {
+      setParts.push("photo_url = @photoUrl");
+      req2.input("photoUrl", photoUrl || null);
+    }
+    if (category !== undefined) {
+      setParts.push("category = @category");
+      req2.input("category", category);
+    }
+
+    if (setParts.length === 0) {
+      res.status(400).json({ error: "Nothing to update" });
+      return;
+    }
+
+    await req2.query(`UPDATE Sightings SET ${setParts.join(", ")} WHERE id = @id`);
+
+    const updated = await pool
+      .request()
+      .input("id", sightingId)
+      .query("SELECT * FROM Sightings WHERE id = @id");
+
+    const row = updated.recordset[0];
+    res.json({
+      success: true,
+      data: {
+        id: row.id,
+        description: row.description,
+        photoUrl: row.photo_url,
+        category: row.category,
+      },
+    });
+  } catch (err) {
+    console.error("Edit sighting error:", err);
+    res.status(500).json({ error: "Failed to edit sighting" });
+  }
+});
+
 router.get("/:id", authenticateOptional, async (req: AuthRequest, res: Response) => {
   try {
     const pool = await getPool();

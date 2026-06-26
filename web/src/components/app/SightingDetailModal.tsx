@@ -15,6 +15,8 @@ import {
   ChevronRight,
   Pin,
   PinOff,
+  Pencil,
+  Camera,
 } from "lucide-react";
 import Link from "next/link";
 import { cn, timeAgo, formatDistance } from "@/lib/utils";
@@ -86,6 +88,12 @@ export function SightingDetailModal({
   const [pinBusy, setPinBusy] = useState(false);
   const [pinned, setPinned] = useState(false);
   const [directionsOpen, setDirectionsOpen] = useState(false);
+  const [editing, setEditing] = useState(false);
+  const [editDescription, setEditDescription] = useState("");
+  const [editPhotoFile, setEditPhotoFile] = useState<File | null>(null);
+  const [editPhotoPreview, setEditPhotoPreview] = useState<string | null>(null);
+  const [editSaving, setEditSaving] = useState(false);
+  const editFileRef = useRef<HTMLInputElement | null>(null);
   const commentsEndRef = useRef<HTMLDivElement | null>(null);
 
   const loadComments = useCallback(async (sightingId: number) => {
@@ -108,6 +116,10 @@ export function SightingDetailModal({
       setLiked(sighting.likedByMe);
       setLikeCount(sighting.likeCount);
       setPinned(!!sighting.isPinned);
+      setEditing(false);
+      setEditDescription(sighting.description);
+      setEditPhotoFile(null);
+      setEditPhotoPreview(null);
       loadComments(sighting.id);
     }
   }, [isOpen, sighting, loadComments]);
@@ -191,6 +203,34 @@ export function SightingDetailModal({
       alert("Failed to delete sighting");
     } finally {
       setDeleting(false);
+    }
+  };
+
+  const handleSaveEdit = async () => {
+    if (!token || !sighting || editSaving) return;
+    if (editDescription.trim().length < 10) return;
+    setEditSaving(true);
+    try {
+      let newPhotoUrl: string | undefined;
+      if (editPhotoFile) {
+        const uploadRes = await api.uploadPhoto(token, editPhotoFile);
+        newPhotoUrl = uploadRes.data.photoUrl;
+      }
+      const fields: { description: string; photoUrl?: string } = {
+        description: editDescription.trim(),
+      };
+      if (newPhotoUrl) fields.photoUrl = newPhotoUrl;
+      await api.editSighting(token, sighting.id, fields);
+      // Update local sighting data so it reflects immediately
+      sighting.description = fields.description;
+      if (newPhotoUrl) sighting.photoUrl = newPhotoUrl;
+      setEditing(false);
+      setEditPhotoFile(null);
+      setEditPhotoPreview(null);
+    } catch (err) {
+      console.error("Failed to save edit:", err);
+    } finally {
+      setEditSaving(false);
     }
   };
 
@@ -314,9 +354,72 @@ export function SightingDetailModal({
                     </Link>
                   </div>
 
-                  <p className="text-deep-800 dark:text-deep-100 leading-relaxed whitespace-pre-wrap">
-                    {sighting.description}
-                  </p>
+                  {editing ? (
+                    <div className="space-y-3 p-4 rounded-xl border-2 border-ocean-400 dark:border-ocean-600 bg-ocean-50/40 dark:bg-ocean-900/10">
+                      <textarea
+                        value={editDescription}
+                        onChange={(e) => setEditDescription(e.target.value)}
+                        rows={4}
+                        className="w-full px-3 py-2.5 rounded-lg border border-deep-200 dark:border-deep-700 bg-white dark:bg-deep-800 text-deep-950 dark:text-white text-sm focus:outline-none focus:ring-2 focus:ring-ocean-500/50 resize-none"
+                        placeholder="Description…"
+                        minLength={10}
+                      />
+                      {/* Photo replacement */}
+                      {editPhotoPreview ? (
+                        <div className="relative rounded-xl overflow-hidden">
+                          <img src={editPhotoPreview} alt="New photo" className="w-full h-40 object-cover" />
+                          <button
+                            type="button"
+                            onClick={() => { setEditPhotoFile(null); setEditPhotoPreview(null); }}
+                            className="absolute top-2 right-2 w-7 h-7 bg-deep-950/60 rounded-full flex items-center justify-center text-white"
+                          >
+                            <X className="w-3.5 h-3.5" />
+                          </button>
+                        </div>
+                      ) : (
+                        <label className="flex items-center gap-2 px-3 py-2.5 rounded-lg border border-dashed border-deep-300 dark:border-deep-600 bg-white dark:bg-deep-800 cursor-pointer hover:border-ocean-400 transition-colors">
+                          <Camera className="w-4 h-4 text-ocean-500 shrink-0" />
+                          <span className="text-sm text-deep-500 dark:text-deep-400">Replace photo (optional)</span>
+                          <input
+                            ref={editFileRef}
+                            type="file"
+                            accept="image/jpeg,image/jpg,image/png,image/webp"
+                            className="hidden"
+                            onChange={(e) => {
+                              const file = e.target.files?.[0];
+                              if (!file) return;
+                              setEditPhotoFile(file);
+                              const reader = new FileReader();
+                              reader.onloadend = () => setEditPhotoPreview(reader.result as string);
+                              reader.readAsDataURL(file);
+                            }}
+                          />
+                        </label>
+                      )}
+                      <div className="flex gap-2">
+                        <button
+                          type="button"
+                          onClick={handleSaveEdit}
+                          disabled={editSaving || editDescription.trim().length < 10}
+                          className="flex-1 py-2 rounded-lg bg-ocean-500 hover:bg-ocean-600 disabled:opacity-50 text-white text-sm font-semibold transition-colors flex items-center justify-center gap-1.5"
+                        >
+                          {editSaving ? <Loader2 className="w-4 h-4 animate-spin" /> : null}
+                          {editSaving ? "Saving…" : "Save Changes"}
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => { setEditing(false); setEditPhotoFile(null); setEditPhotoPreview(null); }}
+                          className="px-4 py-2 rounded-lg border border-deep-200 dark:border-deep-700 text-sm font-semibold text-deep-600 dark:text-deep-300 hover:bg-deep-50 dark:hover:bg-deep-800 transition-colors"
+                        >
+                          Cancel
+                        </button>
+                      </div>
+                    </div>
+                  ) : (
+                    <p className="text-deep-800 dark:text-deep-100 leading-relaxed whitespace-pre-wrap">
+                      {sighting.description}
+                    </p>
+                  )}
 
                   <div className="flex items-center justify-between gap-2">
                     <div className="flex items-center gap-2 text-xs text-deep-500 dark:text-deep-400 font-medium">
@@ -404,14 +507,23 @@ export function SightingDetailModal({
                       {comments.length} {comments.length === 1 ? "comment" : "comments"}
                     </span>
                     {isOwner && (
-                      <button
-                        onClick={handleDelete}
-                        disabled={deleting}
-                        className="ml-auto flex items-center gap-1.5 text-sm font-medium text-deep-500 dark:text-deep-400 hover:text-coral-500 dark:hover:text-coral-400 px-2 py-2 rounded-lg min-h-[44px] disabled:opacity-50"
-                      >
-                        <Trash2 className="w-4 h-4" />
-                        {deleting ? "Deleting…" : "Delete"}
-                      </button>
+                      <>
+                        <button
+                          onClick={() => { setEditing(true); setEditDescription(sighting.description); }}
+                          className="flex items-center gap-1.5 text-sm font-medium text-deep-500 dark:text-deep-400 hover:text-ocean-500 dark:hover:text-ocean-400 px-2 py-2 rounded-lg min-h-[44px]"
+                        >
+                          <Pencil className="w-4 h-4" />
+                          Edit
+                        </button>
+                        <button
+                          onClick={handleDelete}
+                          disabled={deleting}
+                          className="ml-auto flex items-center gap-1.5 text-sm font-medium text-deep-500 dark:text-deep-400 hover:text-coral-500 dark:hover:text-coral-400 px-2 py-2 rounded-lg min-h-[44px] disabled:opacity-50"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                          {deleting ? "Deleting…" : "Delete"}
+                        </button>
+                      </>
                     )}
                     {isModerator && token && (
                       <button
