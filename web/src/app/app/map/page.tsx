@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
+import { useSearchParams } from "next/navigation";
 import {
   APIProvider,
   Map,
@@ -149,21 +150,30 @@ function MapControls({ onLocateMe }: { onLocateMe: () => void }) {
 function MapContent({
   sightings,
   loading,
+  targetSightingId,
   onOpenDetail,
 }: {
   sightings: Sighting[];
   loading: boolean;
+  targetSightingId: number | null;
   onOpenDetail: (s: Sighting) => void;
 }) {
   const map = useMap();
-  const [selectedSighting, setSelectedSighting] = useState<Sighting | null>(
-    null,
-  );
-  const [userLocation, setUserLocation] = useState<{
-    lat: number;
-    lng: number;
-  } | null>(null);
+  const [selectedSighting, setSelectedSighting] = useState<Sighting | null>(null);
+  const [userLocation, setUserLocation] = useState<{ lat: number; lng: number } | null>(null);
   const [locationLoading, setLocationLoading] = useState(true);
+  const [centeredOnTarget, setCenteredOnTarget] = useState(false);
+
+  // Pan to the linked sighting once it's available
+  useEffect(() => {
+    if (!map || !targetSightingId || centeredOnTarget || sightings.length === 0) return;
+    const target = sightings.find((s) => s.id === targetSightingId);
+    if (!target) return;
+    map.panTo({ lat: target.latitude, lng: target.longitude });
+    map.setZoom(14);
+    setSelectedSighting(target);
+    setCenteredOnTarget(true);
+  }, [map, targetSightingId, sightings, centeredOnTarget]);
 
   const locateMe = useCallback(() => {
     if (!navigator.geolocation) {
@@ -175,14 +185,17 @@ function MapContent({
       (pos) => {
         const loc = { lat: pos.coords.latitude, lng: pos.coords.longitude };
         setUserLocation(loc);
-        map?.panTo(loc);
-        map?.setZoom(13);
+        // Only pan to user if we're not already targeting a specific sighting
+        if (!targetSightingId) {
+          map?.panTo(loc);
+          map?.setZoom(13);
+        }
         setLocationLoading(false);
       },
       () => setLocationLoading(false),
       { enableHighAccuracy: true, timeout: 10000 },
     );
-  }, [map]);
+  }, [map, targetSightingId]);
 
   useEffect(() => {
     locateMe();
@@ -220,9 +233,7 @@ function MapContent({
                 : `${sightings.length} Active Sighting${sightings.length === 1 ? "" : "s"}`}
             </p>
             <p className="text-xs text-deep-500 dark:text-deep-400">
-              {locationLoading
-                ? "Getting your location…"
-                : "Within 50km radius"}
+              {locationLoading ? "Getting your location…" : "Last 24h + pinned"}
             </p>
           </div>
         </div>
@@ -294,11 +305,11 @@ function MapContent({
 
 export default function MapPage() {
   const { user } = useAuth();
+  const searchParams = useSearchParams();
+  const targetSightingId = searchParams.get("sighting") ? Number(searchParams.get("sighting")) : null;
   const [sightings, setSightings] = useState<Sighting[]>([]);
   const [loading, setLoading] = useState(true);
-  const [coords, setCoords] = useState<{ lat: number; lng: number } | null>(
-    null,
-  );
+  const [coords, setCoords] = useState<{ lat: number; lng: number } | null>(null);
   const [detailSighting, setDetailSighting] = useState<Sighting | null>(null);
   const [modalOpen, setModalOpen] = useState(false);
 
@@ -369,6 +380,7 @@ export default function MapPage() {
             <MapContent
               sightings={sightings}
               loading={loading}
+              targetSightingId={targetSightingId}
               onOpenDetail={(s) => {
                 setDetailSighting(s);
                 setModalOpen(true);
