@@ -78,6 +78,7 @@ Set in: Render Dashboard → sardinewatch-api → Environment
 | `VAPID_MAILTO` | Email for VAPID contact |
 | `RESEND_API_KEY` | API key from Resend for sending emails |
 | `FRONTEND_URL` | `https://sardinewatch.co.za` |
+| `CONTACT_EMAIL` | Email address to receive contact form submissions (currently `whytefire@gmail.com`) |
 
 ### Health Check Endpoint
 `GET https://sardinewatch-api.onrender.com/api/health`
@@ -145,6 +146,14 @@ Sends the forgot password reset email.
 1. Login to resend.com
 2. Go to **API Keys** → **Create API Key**
 3. Add to Render environment variables as `RESEND_API_KEY`
+
+### Email routing
+| Email type | Sent to |
+|---|---|
+| Forgot password reset | The user who requested it (their own email) |
+| Contact form submissions | `CONTACT_EMAIL` env var on Render (currently `whytefire@gmail.com`) |
+
+> **Note:** `support@sardinewatch.co.za` is not set up as a real mailbox in Absolute Hosting. Contact form emails go directly to Gmail. To change the destination, update `CONTACT_EMAIL` in Render environment variables.
 
 ---
 
@@ -246,6 +255,7 @@ sardine-spotter/
 | Live website | https://sardinewatch.co.za |
 | API health check | https://sardinewatch-api.onrender.com/api/health |
 | Play Store listing | https://play.google.com/store/apps/details?id=za.co.sardinewatch.twa |
+| Contact page | https://sardinewatch.co.za/contact |
 | Delete account page | https://sardinewatch.co.za/delete-account |
 | Privacy policy | https://sardinewatch.co.za/privacy |
 | Terms of use | https://sardinewatch.co.za/terms |
@@ -267,4 +277,4 @@ sardine-spotter/
 
 ---
 
-*Last updated: June 2026*
+*Last updated: 26 June 2026*
