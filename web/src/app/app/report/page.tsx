@@ -22,7 +22,8 @@ type LocationStatus = "idle" | "requesting" | "ready" | "denied" | "error";
 type LocationMode = "gps" | "manual";
 
 export default function ReportPage() {
-  const { token } = useAuth();
+  const { token, user } = useAuth();
+  const isAdmin = user?.role === "admin";
   const [description, setDescription] = useState("");
   const [photoFile, setPhotoFile] = useState<File | null>(null);
   const [photoPreview, setPhotoPreview] = useState<string | null>(null);
@@ -312,8 +313,8 @@ export default function ReportPage() {
             )}
           </div>
 
-          {/* GPS / Manual toggle */}
-          <div className="flex rounded-xl overflow-hidden border border-deep-200 dark:border-deep-700 mb-3">
+          {/* GPS / Manual toggle — manual entry is admin-only */}
+          {isAdmin && <div className="flex rounded-xl overflow-hidden border border-deep-200 dark:border-deep-700 mb-3">
             <button
               type="button"
               onClick={() => { setLocationMode("gps"); setCoords(null); setLocationStatus("idle"); }}
@@ -340,9 +341,9 @@ export default function ReportPage() {
               <Keyboard className="w-3.5 h-3.5" />
               Enter Manually
             </button>
-          </div>
+          </div>}
 
-          {locationMode === "gps" ? (
+          {(!isAdmin || locationMode === "gps") ? (
             <>
               <button
                 type="button"
