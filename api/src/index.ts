@@ -12,6 +12,7 @@ import commentsRoutes from "./routes/comments";
 import notificationsRoutes from "./routes/notifications";
 import uploadRoutes from "./routes/upload";
 import adminRoutes from "./routes/admin";
+import contactRoutes from "./routes/contact";
 
 const app = express();
 const PORT = process.env.PORT || 4000;
@@ -49,6 +50,7 @@ app.use("/api/comments", commentsRoutes);
 app.use("/api/notifications", notificationsRoutes);
 app.use("/api/upload", uploadRoutes);
 app.use("/api/admin", adminRoutes);
+app.use("/api/contact", contactRoutes);
 
 app.get("/api/health", (_req, res) => {
   res.json({ status: "ok", timestamp: new Date().toISOString() });
