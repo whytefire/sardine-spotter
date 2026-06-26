@@ -20,7 +20,7 @@ router.post("/", async (req: Request, res: Response) => {
 
     await resend.emails.send({
       from: "SardineWatch Contact <noreply@sardinewatch.co.za>",
-      to: "support@sardinewatch.co.za",
+      to: process.env.CONTACT_EMAIL || "whytefire@gmail.com",
       replyTo: email,
       subject: `Contact form message from ${name}`,
       html: `
