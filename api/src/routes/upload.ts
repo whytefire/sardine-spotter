@@ -1,55 +1,50 @@
 import { Router, Response } from "express";
 import { authenticate, AuthRequest } from "../middleware/auth";
 import multer from "multer";
-import path from "path";
-import fs from "fs";
+import { v2 as cloudinary } from "cloudinary";
+import { Readable } from "stream";
 
-const UPLOAD_DIR = path.join(__dirname, "../../uploads");
-
-if (!fs.existsSync(UPLOAD_DIR)) {
-  fs.mkdirSync(UPLOAD_DIR, { recursive: true });
-}
-
-// `kind` is taken from the URL via a route-level field on the request — see
-// the route handlers below. Defaults to 'sighting' for /photo.
-const storage = multer.diskStorage({
-  destination: (_req, _file, cb) => cb(null, UPLOAD_DIR),
-  filename: (req, file, cb) => {
-    const kind = (req as AuthRequest & { uploadKind?: string }).uploadKind ?? "sighting";
-    const uniqueSuffix = `${Date.now()}-${Math.round(Math.random() * 1e9)}`;
-    const ext = path.extname(file.originalname);
-    cb(null, `${kind}-${uniqueSuffix}${ext}`);
-  },
+cloudinary.config({
+  cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
+  api_key: process.env.CLOUDINARY_API_KEY,
+  api_secret: process.env.CLOUDINARY_API_SECRET,
 });
 
-const fileFilter = (_req: Express.Request, file: Express.Multer.File, cb: multer.FileFilterCallback) => {
-  const allowed = ["image/jpeg", "image/jpg", "image/png", "image/webp"];
-  if (allowed.includes(file.mimetype)) {
-    cb(null, true);
-  } else {
-    cb(new Error("Only JPEG, PNG, and WebP images are allowed"));
-  }
-};
-
+// Store uploads in memory — we stream straight to Cloudinary, nothing touches disk
 const upload = multer({
-  storage,
-  fileFilter,
-  limits: { fileSize: 5 * 1024 * 1024 }, // 5MB — covers sighting photos and avatars
+  storage: multer.memoryStorage(),
+  fileFilter: (_req, file, cb) => {
+    const allowed = ["image/jpeg", "image/jpg", "image/png", "image/webp"];
+    if (allowed.includes(file.mimetype)) {
+      cb(null, true);
+    } else {
+      cb(new Error("Only JPEG, PNG, and WebP images are allowed"));
+    }
+  },
+  limits: { fileSize: 5 * 1024 * 1024 },
 });
+
+function uploadToCloudinary(
+  buffer: Buffer,
+  folder: string,
+): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const stream = cloudinary.uploader.upload_stream(
+      { folder, resource_type: "image" },
+      (err, result) => {
+        if (err || !result) return reject(err ?? new Error("Upload failed"));
+        resolve(result.secure_url);
+      },
+    );
+    Readable.from(buffer).pipe(stream);
+  });
+}
 
 const router = Router();
-
-function tagUploadKind(kind: "sighting" | "avatar") {
-  return (req: AuthRequest, _res: Response, next: () => void) => {
-    (req as AuthRequest & { uploadKind?: string }).uploadKind = kind;
-    next();
-  };
-}
 
 router.post(
   "/photo",
   authenticate,
-  tagUploadKind("sighting"),
   upload.single("photo"),
   async (req: AuthRequest, res: Response) => {
     try {
@@ -57,29 +52,18 @@ router.post(
         res.status(400).json({ error: "No file uploaded" });
         return;
       }
-
-      const photoUrl = `/uploads/${req.file.filename}`;
-
-      res.json({
-        success: true,
-        data: { photoUrl, filename: req.file.filename },
-      });
+      const photoUrl = await uploadToCloudinary(req.file.buffer, "sardinewatch/sightings");
+      res.json({ success: true, data: { photoUrl } });
     } catch (err) {
       console.error("Upload error:", err);
       res.status(500).json({ error: "Upload failed" });
     }
-  }
+  },
 );
 
-/**
- * Avatar upload. Same constraints as photo upload, but files are prefixed
- * `avatar-...` so they're trivially distinguishable on disk. The returned
- * URL is meant to be passed straight to PUT /api/auth/profile.
- */
 router.post(
   "/avatar",
   authenticate,
-  tagUploadKind("avatar"),
   upload.single("avatar"),
   async (req: AuthRequest, res: Response) => {
     try {
@@ -87,18 +71,13 @@ router.post(
         res.status(400).json({ error: "No file uploaded" });
         return;
       }
-
-      const avatarUrl = `/uploads/${req.file.filename}`;
-
-      res.json({
-        success: true,
-        data: { avatarUrl, filename: req.file.filename },
-      });
+      const avatarUrl = await uploadToCloudinary(req.file.buffer, "sardinewatch/avatars");
+      res.json({ success: true, data: { avatarUrl } });
     } catch (err) {
       console.error("Avatar upload error:", err);
-      res.status(500).json({ error: "Avatar upload failed" });
+      res.status(500).json({ error: "Upload failed" });
     }
-  }
+  },
 );
 
 export default router;

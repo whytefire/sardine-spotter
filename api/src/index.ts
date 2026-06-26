@@ -1,8 +1,6 @@
 // Must be first so env vars are present before any other module loads
 // (e.g. services/notifications reads VAPID_PUBLIC_KEY at module-init time).
 import "dotenv/config";
-import path from "path";
-
 import express from "express";
 import cors from "cors";
 import helmet from "helmet";
@@ -41,8 +39,6 @@ app.use(cors({
 }));
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
-
-app.use("/uploads", express.static(path.join(__dirname, "../uploads")));
 
 app.use("/api/auth", authRoutes);
 app.use("/api/sightings", sightingsRoutes);
