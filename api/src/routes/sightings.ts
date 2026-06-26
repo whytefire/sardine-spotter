@@ -39,7 +39,7 @@ router.get("/", authenticateOptional, async (req: AuthRequest, res: Response) =>
           AND (
             s.is_pinned = 1
             OR (
-              s.created_at >= DATEADD(hour, -24, GETDATE())
+              s.created_at >= DATEADD(hour, -48, GETDATE())
               AND geography::Point(s.latitude, s.longitude, 4326).STDistance(
                 geography::Point(@lat, @lng, 4326)
               ) / 1000.0 <= @radius
@@ -63,7 +63,7 @@ router.get("/", authenticateOptional, async (req: AuthRequest, res: Response) =>
         FROM Sightings s
         JOIN Users u ON s.user_id = u.id
         WHERE s.is_active = 1
-          AND (s.is_pinned = 1 OR s.created_at >= DATEADD(hour, -24, GETDATE()))
+          AND (s.is_pinned = 1 OR s.created_at >= DATEADD(hour, -48, GETDATE()))
         ORDER BY s.is_pinned DESC, s.created_at DESC
         OFFSET @offset ROWS FETCH NEXT @limit ROWS ONLY
       `;
