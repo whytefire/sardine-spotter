@@ -10,6 +10,7 @@ import {
   CheckCircle2,
   AlertCircle,
   Loader2,
+  Keyboard,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { motion } from "framer-motion";
@@ -18,6 +19,7 @@ import { useAuth } from "@/lib/auth-context";
 import { api } from "@/lib/api";
 
 type LocationStatus = "idle" | "requesting" | "ready" | "denied" | "error";
+type LocationMode = "gps" | "manual";
 
 export default function ReportPage() {
   const { token } = useAuth();
@@ -26,6 +28,9 @@ export default function ReportPage() {
   const [photoPreview, setPhotoPreview] = useState<string | null>(null);
   const [coords, setCoords] = useState<{ lat: number; lng: number } | null>(null);
   const [locationStatus, setLocationStatus] = useState<LocationStatus>("idle");
+  const [locationMode, setLocationMode] = useState<LocationMode>("gps");
+  const [manualLat, setManualLat] = useState("");
+  const [manualLng, setManualLng] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [submitted, setSubmitted] = useState(false);
   const [error, setError] = useState("");
@@ -128,10 +133,31 @@ export default function ReportPage() {
     }
   };
 
+  const applyManualCoords = () => {
+    const lat = parseFloat(manualLat);
+    const lng = parseFloat(manualLng);
+    if (isNaN(lat) || lat < -90 || lat > 90) {
+      setError("Latitude must be a number between -90 and 90");
+      return;
+    }
+    if (isNaN(lng) || lng < -180 || lng > 180) {
+      setError("Longitude must be a number between -180 and 180");
+      return;
+    }
+    setCoords({ lat, lng });
+    setLocationStatus("ready");
+    setError("");
+  };
+
   const resetForm = () => {
     setSubmitted(false);
     setDescription("");
     clearPhoto();
+    setCoords(null);
+    setLocationStatus("idle");
+    setLocationMode("gps");
+    setManualLat("");
+    setManualLng("");
     setError("");
   };
 
@@ -285,58 +311,135 @@ export default function ReportPage() {
               <span className="text-xs text-coral-500 font-medium">Required to submit</span>
             )}
           </div>
-          {!coords && (
-            <p className="text-xs text-deep-500 dark:text-deep-400 mb-2">
-              Tap the button below to share where you spotted the sardines.
-            </p>
-          )}
-          <button
-            type="button"
-            onClick={requestLocation}
-            disabled={locationStatus === "requesting"}
-            className={cn(
-              "w-full flex items-center gap-3 p-4 rounded-xl border-2 transition-all text-left cursor-pointer",
-              coords
-                ? "border-ocean-500 bg-ocean-50 dark:bg-ocean-900/20"
-                : "border-coral-300 dark:border-coral-700 bg-white dark:bg-deep-800 hover:border-ocean-400 dark:hover:border-ocean-500 hover:bg-ocean-50 dark:hover:bg-ocean-900/10"
-            )}
-          >
-            {locationStatus === "requesting" ? (
-              <Loader2 className="w-5 h-5 text-ocean-500 animate-spin shrink-0" />
-            ) : coords ? (
-              <CheckCircle2 className="w-5 h-5 text-sea-green-500 shrink-0" />
-            ) : (
-              <Navigation className="w-5 h-5 text-coral-500 shrink-0" />
-            )}
-            <div className="flex-1 min-w-0">
-              <p
+
+          {/* GPS / Manual toggle */}
+          <div className="flex rounded-xl overflow-hidden border border-deep-200 dark:border-deep-700 mb-3">
+            <button
+              type="button"
+              onClick={() => { setLocationMode("gps"); setCoords(null); setLocationStatus("idle"); }}
+              className={cn(
+                "flex-1 flex items-center justify-center gap-1.5 py-2 text-xs font-semibold transition-colors",
+                locationMode === "gps"
+                  ? "bg-ocean-500 text-white"
+                  : "bg-white dark:bg-deep-800 text-deep-500 dark:text-deep-400 hover:bg-deep-50 dark:hover:bg-deep-700"
+              )}
+            >
+              <Navigation className="w-3.5 h-3.5" />
+              Use GPS
+            </button>
+            <button
+              type="button"
+              onClick={() => { setLocationMode("manual"); setCoords(null); setLocationStatus("idle"); }}
+              className={cn(
+                "flex-1 flex items-center justify-center gap-1.5 py-2 text-xs font-semibold transition-colors border-l border-deep-200 dark:border-deep-700",
+                locationMode === "manual"
+                  ? "bg-ocean-500 text-white"
+                  : "bg-white dark:bg-deep-800 text-deep-500 dark:text-deep-400 hover:bg-deep-50 dark:hover:bg-deep-700"
+              )}
+            >
+              <Keyboard className="w-3.5 h-3.5" />
+              Enter Manually
+            </button>
+          </div>
+
+          {locationMode === "gps" ? (
+            <>
+              <button
+                type="button"
+                onClick={requestLocation}
+                disabled={locationStatus === "requesting"}
                 className={cn(
-                  "font-semibold text-sm",
+                  "w-full flex items-center gap-3 p-4 rounded-xl border-2 transition-all text-left cursor-pointer",
                   coords
-                    ? "text-deep-950 dark:text-white"
-                    : "text-coral-600 dark:text-coral-400"
+                    ? "border-ocean-500 bg-ocean-50 dark:bg-ocean-900/20"
+                    : "border-coral-300 dark:border-coral-700 bg-white dark:bg-deep-800 hover:border-ocean-400 dark:hover:border-ocean-500 hover:bg-ocean-50 dark:hover:bg-ocean-900/10"
                 )}
               >
-                {locationStatus === "requesting"
-                  ? "Getting your location…"
-                  : coords
-                    ? "Location captured ✓"
-                    : "Tap here to use my current location"}
+                {locationStatus === "requesting" ? (
+                  <Loader2 className="w-5 h-5 text-ocean-500 animate-spin shrink-0" />
+                ) : coords ? (
+                  <CheckCircle2 className="w-5 h-5 text-sea-green-500 shrink-0" />
+                ) : (
+                  <Navigation className="w-5 h-5 text-coral-500 shrink-0" />
+                )}
+                <div className="flex-1 min-w-0">
+                  <p className={cn(
+                    "font-semibold text-sm",
+                    coords ? "text-deep-950 dark:text-white" : "text-coral-600 dark:text-coral-400"
+                  )}>
+                    {locationStatus === "requesting"
+                      ? "Getting your location…"
+                      : coords
+                        ? "Location captured ✓"
+                        : "Tap here to use my current location"}
+                  </p>
+                  <p className="text-xs text-deep-500 dark:text-deep-400 mt-0.5 truncate">
+                    {coords
+                      ? `${coords.lat.toFixed(5)}°, ${coords.lng.toFixed(5)}°`
+                      : "We need your GPS coordinates to pin the sighting on the map"}
+                  </p>
+                </div>
+                {coords && <MapPin className="w-4 h-4 text-ocean-500 shrink-0" aria-hidden="true" />}
+              </button>
+              {locationStatus === "denied" && (
+                <p className="mt-2 text-xs text-coral-600 dark:text-coral-400">
+                  Please enable location access in your browser settings and try again.
+                </p>
+              )}
+            </>
+          ) : (
+            <div className="space-y-3 p-4 rounded-xl border-2 border-deep-200 dark:border-deep-700 bg-white dark:bg-deep-800">
+              <p className="text-xs text-deep-500 dark:text-deep-400">
+                Enter decimal coordinates (e.g. <span className="font-mono">-30.276</span> and <span className="font-mono">30.755</span>).
               </p>
-              <p className="text-xs text-deep-500 dark:text-deep-400 mt-0.5 truncate">
-                {coords
-                  ? `${coords.lat.toFixed(5)}°, ${coords.lng.toFixed(5)}°`
-                  : "We need your GPS coordinates to pin the sighting on the map"}
-              </p>
+              <div className="flex gap-2">
+                <div className="flex-1">
+                  <label htmlFor="manual-lat" className="block text-xs font-semibold text-deep-600 dark:text-deep-300 mb-1">
+                    Latitude
+                  </label>
+                  <input
+                    id="manual-lat"
+                    type="number"
+                    step="any"
+                    value={manualLat}
+                    onChange={(e) => { setManualLat(e.target.value); setCoords(null); }}
+                    placeholder="-30.276"
+                    className="w-full px-3 py-2.5 rounded-lg border border-deep-200 dark:border-deep-700 bg-deep-50 dark:bg-deep-900 text-deep-950 dark:text-white text-sm font-mono focus:outline-none focus:ring-2 focus:ring-ocean-500/50 focus:border-ocean-500"
+                  />
+                </div>
+                <div className="flex-1">
+                  <label htmlFor="manual-lng" className="block text-xs font-semibold text-deep-600 dark:text-deep-300 mb-1">
+                    Longitude
+                  </label>
+                  <input
+                    id="manual-lng"
+                    type="number"
+                    step="any"
+                    value={manualLng}
+                    onChange={(e) => { setManualLng(e.target.value); setCoords(null); }}
+                    placeholder="30.755"
+                    className="w-full px-3 py-2.5 rounded-lg border border-deep-200 dark:border-deep-700 bg-deep-50 dark:bg-deep-900 text-deep-950 dark:text-white text-sm font-mono focus:outline-none focus:ring-2 focus:ring-ocean-500/50 focus:border-ocean-500"
+                  />
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={applyManualCoords}
+                disabled={!manualLat || !manualLng}
+                className="w-full py-2.5 rounded-lg bg-ocean-500 hover:bg-ocean-600 disabled:opacity-40 disabled:cursor-not-allowed text-white text-sm font-semibold transition-colors flex items-center justify-center gap-1.5"
+              >
+                {coords ? (
+                  <><CheckCircle2 className="w-4 h-4" /> Location set ✓</>
+                ) : (
+                  <><MapPin className="w-4 h-4" /> Set Location</>
+                )}
+              </button>
+              {coords && (
+                <p className="text-xs text-sea-green-600 dark:text-sea-green-400 text-center font-mono">
+                  {coords.lat.toFixed(5)}°, {coords.lng.toFixed(5)}°
+                </p>
+              )}
             </div>
-            {coords && (
-              <MapPin className="w-4 h-4 text-ocean-500 shrink-0" aria-hidden="true" />
-            )}
-          </button>
-          {locationStatus === "denied" && (
-            <p className="mt-2 text-xs text-coral-600 dark:text-coral-400">
-              Please enable location access in your browser settings and try again.
-            </p>
           )}
         </div>
 

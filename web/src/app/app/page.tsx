@@ -14,6 +14,7 @@ import {
   Waves,
   AlertCircle,
   RefreshCw,
+  Pin,
 } from "lucide-react";
 import { cn, timeAgo, formatDistance } from "@/lib/utils";
 import { motion } from "framer-motion";
@@ -83,15 +84,31 @@ function SightingCard({
       initial={{ opacity: 0, y: 24 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ delay: index * 0.06, duration: 0.45, ease: [0.22, 1, 0.36, 1] }}
-      className="group relative rounded-2xl border border-deep-200/80 dark:border-deep-700/60 bg-white dark:bg-deep-850 shadow-sm hover:shadow-xl hover:shadow-ocean-600/8 dark:hover:shadow-ocean-400/5 transition-all duration-300 hover:-translate-y-0.5 overflow-hidden"
+      className={cn(
+        "group relative rounded-2xl border bg-white dark:bg-deep-850 shadow-sm hover:shadow-xl transition-all duration-300 hover:-translate-y-0.5 overflow-hidden",
+        sighting.isPinned
+          ? "border-amber-400/70 dark:border-amber-500/50 hover:shadow-amber-500/10 dark:hover:shadow-amber-400/5"
+          : "border-deep-200/80 dark:border-deep-700/60 hover:shadow-ocean-600/8 dark:hover:shadow-ocean-400/5"
+      )}
     >
-      {/* Teal accent stripe */}
-      <div className="absolute left-0 top-0 bottom-0 w-1 bg-gradient-to-b from-ocean-400 to-ocean-600" aria-hidden="true" />
+      {/* Accent stripe — amber for pinned, teal otherwise */}
+      <div className={cn(
+        "absolute left-0 top-0 bottom-0 w-1 bg-gradient-to-b",
+        sighting.isPinned ? "from-amber-400 to-amber-600" : "from-ocean-400 to-ocean-600"
+      )} aria-hidden="true" />
+
+      {/* Pinned badge */}
+      {sighting.isPinned && (
+        <div className="absolute top-3 right-3 z-10 flex items-center gap-1 px-2 py-0.5 rounded-full bg-amber-100 dark:bg-amber-900/40 border border-amber-300 dark:border-amber-700 text-amber-700 dark:text-amber-400 text-[10px] font-bold uppercase tracking-wider">
+          <Pin className="w-3 h-3" />
+          Pinned
+        </div>
+      )}
 
       {/* Moderation kebab — sits OUTSIDE the open-button so its own button
           doesn't violate the HTML "no nested buttons" rule. Only renders
           for admin users. */}
-      {canModerate && token && (
+      {canModerate && token && !sighting.isPinned && (
         <div className="absolute top-4 right-4 z-10">
           <ModerationMenu
             canModerate
@@ -332,6 +349,22 @@ export default function FeedPage() {
     }
   };
 
+  const handlePinChange = (id: number, isPinned: boolean) => {
+    setSightings((prev) =>
+      prev
+        .map((s) => (s.id === id ? { ...s, isPinned } : s))
+        // Re-sort: pinned items bubble to the top
+        .sort((a, b) => {
+          if (a.isPinned && !b.isPinned) return -1;
+          if (!a.isPinned && b.isPinned) return 1;
+          return 0;
+        })
+    );
+    if (selected?.id === id) {
+      setSelected((s) => (s ? { ...s, isPinned } : s));
+    }
+  };
+
   return (
     <div className="max-w-2xl mx-auto px-4 py-6 sm:py-8">
       {/* Header */}
@@ -482,6 +515,7 @@ export default function FeedPage() {
         onClose={closeModal}
         onDelete={handleDelete}
         onLikeChange={handleLikeChange}
+        onPinChange={handlePinChange}
       />
     </div>
   );

@@ -162,6 +162,14 @@ export const api = {
       { method: "DELETE", token }
     ),
 
+  /** Pins or unpins a sighting. Admin only. */
+  pinSighting: (token: string, id: number, pinned: boolean) =>
+    apiFetch<ApiEnvelope<{ isPinned: boolean }>>(`/api/sightings/${id}/pin`, {
+      method: "PUT",
+      token,
+      body: JSON.stringify({ pinned }),
+    }),
+
   /** Deletes a sighting. Allowed for the original reporter and for admins. */
   deleteSighting: (token: string, id: number, reason?: string) =>
     apiFetch<ApiEnvelope<null>>(`/api/sightings/${id}`, {

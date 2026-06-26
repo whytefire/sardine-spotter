@@ -13,6 +13,8 @@ import {
   Trash2,
   Navigation,
   ChevronRight,
+  Pin,
+  PinOff,
 } from "lucide-react";
 import Link from "next/link";
 import { cn, timeAgo, formatDistance } from "@/lib/utils";
@@ -60,6 +62,8 @@ interface SightingDetailModalProps {
   onDelete?: (id: number) => void;
   /** Called whenever like state changes so callers can keep their list in sync. */
   onLikeChange?: (id: number, likeCount: number, likedByMe: boolean) => void;
+  /** Called when an admin pins or unpins the sighting. */
+  onPinChange?: (id: number, isPinned: boolean) => void;
 }
 
 export function SightingDetailModal({
@@ -68,6 +72,7 @@ export function SightingDetailModal({
   onClose,
   onDelete,
   onLikeChange,
+  onPinChange,
 }: SightingDetailModalProps) {
   const { user, token } = useAuth();
   const [comments, setComments] = useState<Comment[]>([]);
@@ -78,6 +83,8 @@ export function SightingDetailModal({
   const [likeCount, setLikeCount] = useState(0);
   const [likeBusy, setLikeBusy] = useState(false);
   const [deleting, setDeleting] = useState(false);
+  const [pinBusy, setPinBusy] = useState(false);
+  const [pinned, setPinned] = useState(false);
   const [directionsOpen, setDirectionsOpen] = useState(false);
   const commentsEndRef = useRef<HTMLDivElement | null>(null);
 
@@ -100,6 +107,7 @@ export function SightingDetailModal({
       setCommentText("");
       setLiked(sighting.likedByMe);
       setLikeCount(sighting.likeCount);
+      setPinned(!!sighting.isPinned);
       loadComments(sighting.id);
     }
   }, [isOpen, sighting, loadComments]);
@@ -183,6 +191,22 @@ export function SightingDetailModal({
       alert("Failed to delete sighting");
     } finally {
       setDeleting(false);
+    }
+  };
+
+  const handleTogglePin = async () => {
+    if (!token || !sighting || pinBusy) return;
+    setPinBusy(true);
+    const next = !pinned;
+    setPinned(next);
+    try {
+      await api.pinSighting(token, sighting.id, next);
+      onPinChange?.(sighting.id, next);
+    } catch (err) {
+      console.error("Failed to toggle pin:", err);
+      setPinned(!next);
+    } finally {
+      setPinBusy(false);
     }
   };
 
@@ -355,7 +379,7 @@ export function SightingDetailModal({
                     )}
                   </AnimatePresence>
 
-                  <div className="flex items-center gap-4 pt-2 border-t border-deep-100 dark:border-deep-800">
+                  <div className="flex items-center gap-2 pt-2 border-t border-deep-100 dark:border-deep-800">
                     <button
                       onClick={handleToggleLike}
                       disabled={!token || likeBusy}
@@ -389,8 +413,31 @@ export function SightingDetailModal({
                         {deleting ? "Deleting…" : "Delete"}
                       </button>
                     )}
+                    {isModerator && token && (
+                      <button
+                        onClick={handleTogglePin}
+                        disabled={pinBusy}
+                        aria-pressed={pinned}
+                        aria-label={pinned ? "Unpin sighting" : "Pin sighting to top of feed"}
+                        className={cn(
+                          "ml-auto flex items-center gap-1.5 text-sm font-semibold transition-all px-2 py-2 rounded-lg min-h-[44px] disabled:opacity-50 disabled:cursor-not-allowed",
+                          pinned
+                            ? "text-amber-600 dark:text-amber-400"
+                            : "text-deep-600 dark:text-deep-300 hover:text-amber-600 dark:hover:text-amber-400"
+                        )}
+                      >
+                        {pinBusy ? (
+                          <Loader2 className="w-4 h-4 animate-spin" />
+                        ) : pinned ? (
+                          <PinOff className="w-4 h-4" />
+                        ) : (
+                          <Pin className="w-4 h-4" />
+                        )}
+                        {pinned ? "Unpin" : "Pin"}
+                      </button>
+                    )}
                     {showModeratorMenu && token && sighting && (
-                      <div className="ml-auto">
+                      <div className={cn(!isModerator && "ml-auto")}>
                         <ModerationMenu
                           canModerate
                           targetLabel="this sighting"

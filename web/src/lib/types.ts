@@ -14,6 +14,8 @@ export interface Sighting {
   likeCount: number;
   /** True when the CURRENT viewer has liked this sighting. False for guests. */
   likedByMe: boolean;
+  /** Admin-pinned sightings always appear at the top of the feed. */
+  isPinned?: boolean;
 }
 
 export interface Comment {

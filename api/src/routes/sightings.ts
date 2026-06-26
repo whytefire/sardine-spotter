@@ -36,11 +36,16 @@ router.get("/", authenticateOptional, async (req: AuthRequest, res: Response) =>
         FROM Sightings s
         JOIN Users u ON s.user_id = u.id
         WHERE s.is_active = 1
-          AND s.created_at >= DATEADD(hour, -24, GETDATE())
-          AND geography::Point(s.latitude, s.longitude, 4326).STDistance(
-            geography::Point(@lat, @lng, 4326)
-          ) / 1000.0 <= @radius
-        ORDER BY s.created_at DESC
+          AND (
+            s.is_pinned = 1
+            OR (
+              s.created_at >= DATEADD(hour, -24, GETDATE())
+              AND geography::Point(s.latitude, s.longitude, 4326).STDistance(
+                geography::Point(@lat, @lng, 4326)
+              ) / 1000.0 <= @radius
+            )
+          )
+        ORDER BY s.is_pinned DESC, s.created_at DESC
         OFFSET @offset ROWS FETCH NEXT @limit ROWS ONLY
       `;
       request.input("lat", Number(lat));
@@ -58,8 +63,8 @@ router.get("/", authenticateOptional, async (req: AuthRequest, res: Response) =>
         FROM Sightings s
         JOIN Users u ON s.user_id = u.id
         WHERE s.is_active = 1
-          AND s.created_at >= DATEADD(hour, -24, GETDATE())
-        ORDER BY s.created_at DESC
+          AND (s.is_pinned = 1 OR s.created_at >= DATEADD(hour, -24, GETDATE()))
+        ORDER BY s.is_pinned DESC, s.created_at DESC
         OFFSET @offset ROWS FETCH NEXT @limit ROWS ONLY
       `;
     }
@@ -85,6 +90,7 @@ router.get("/", authenticateOptional, async (req: AuthRequest, res: Response) =>
         commentCount: row.comment_count,
         likeCount: row.like_count,
         likedByMe: !!row.liked_by_me,
+        isPinned: !!row.is_pinned,
       })),
     });
   } catch (err) {
@@ -401,6 +407,35 @@ router.delete("/:id", authenticate, async (req: AuthRequest, res: Response) => {
   } catch (err) {
     console.error("Delete sighting error:", err);
     res.status(500).json({ error: "Failed to delete sighting" });
+  }
+});
+
+/**
+ * Pin or unpin a sighting. Admin only.
+ * PUT /api/sightings/:id/pin   { pinned: true | false }
+ */
+router.put("/:id/pin", authenticate, async (req: AuthRequest, res: Response) => {
+  try {
+    if (req.user!.role !== "admin") {
+      res.status(403).json({ error: "Admin access required" });
+      return;
+    }
+    const sightingId = Number(req.params.id);
+    if (!Number.isFinite(sightingId)) {
+      res.status(400).json({ error: "Invalid sighting id" });
+      return;
+    }
+    const pinned = req.body?.pinned === true || req.body?.pinned === 1;
+    const pool = await getPool();
+    await pool
+      .request()
+      .input("id", sightingId)
+      .input("pinned", pinned ? 1 : 0)
+      .query("UPDATE Sightings SET is_pinned = @pinned WHERE id = @id");
+    res.json({ success: true, isPinned: pinned });
+  } catch (err) {
+    console.error("Pin sighting error:", err);
+    res.status(500).json({ error: "Failed to update pin status" });
   }
 });
 

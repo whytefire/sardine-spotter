@@ -288,6 +288,12 @@ IF NOT EXISTS (SELECT 1 FROM sys.columns
     ALTER TABLE Users ADD ban_reason NVARCHAR(500) NULL;
 GO
 
+-- 2026-06-26: pinned sightings
+IF NOT EXISTS (SELECT 1 FROM sys.columns
+               WHERE object_id = OBJECT_ID('Sightings') AND name = 'is_pinned')
+    ALTER TABLE Sightings ADD is_pinned BIT NOT NULL DEFAULT 0;
+GO
+
 -- 2026-06-24: password reset tokens
 IF NOT EXISTS (SELECT * FROM sys.tables WHERE name = 'PasswordResetTokens')
 CREATE TABLE PasswordResetTokens (
