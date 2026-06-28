@@ -17,6 +17,8 @@ export const metadata: Metadata = {
 import Hero from "@/components/landing/Hero";
 import Features from "@/components/landing/Features";
 import HowItWorks from "@/components/landing/HowItWorks";
+import Download from "@/components/landing/Download";
+import FAQ from "@/components/landing/FAQ";
 import CTA from "@/components/landing/CTA";
 import Footer from "@/components/landing/Footer";
 
@@ -28,6 +30,8 @@ export default function Home() {
         <Hero />
         <Features />
         <HowItWorks />
+        <Download />
+        <FAQ />
         <CTA />
       </main>
       <Footer />
