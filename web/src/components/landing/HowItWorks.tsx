@@ -30,7 +30,7 @@ const steps = [
     number: "04",
     title: "Get Alerted",
     description:
-      "Receive instant notifications when someone spots sardines within your chosen radius. Never miss the action.",
+      "Receive instant notifications when someone spots sardines along the KZN coast. Never miss the action.",
   },
 ];
 

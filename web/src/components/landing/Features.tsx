@@ -24,7 +24,7 @@ const features = [
     icon: Bell,
     title: "Instant Notifications",
     description:
-      "Get alerted the moment someone spots sardines within your chosen radius. Set your range from 1km to 2,000km.",
+      "Get alerted the moment someone spots sardines anywhere along the KZN coast. Enable push notifications once and never miss the action.",
     gradient: "from-coral-500 to-sunset-500",
   },
   {

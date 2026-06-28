@@ -28,7 +28,7 @@ const faqs = [
   },
   {
     q: "How do push notifications work?",
-    a: "Once you enable notifications in the app, you'll get an alert any time a sardine sighting is reported within your chosen radius. You can adjust your radius in Settings.",
+    a: "Once you enable notifications in the app, you'll get an alert any time a sardine sighting is reported along the KZN coast. You can turn notifications on or off at any time in Settings.",
   },
   {
     q: "How accurate are the sightings?",
