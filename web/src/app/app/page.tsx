@@ -374,7 +374,7 @@ export default function FeedPage() {
             Live Feed
           </h1>
           <p className="text-deep-500 dark:text-deep-400 text-sm mt-1.5">
-            Sightings from the last 48 hours near you
+            All sightings along the KZN coast in the last 48 hours
           </p>
         </div>
         <button
@@ -414,7 +414,7 @@ export default function FeedPage() {
           <p className="text-ocean-200 text-sm mt-0.5">
             {loading
               ? "Loading sightings…"
-              : `${sightings.length} sighting${sightings.length === 1 ? "" : "s"} in the last 48h${coords ? " within your radius" : ""}`}
+              : `${sightings.length} sighting${sightings.length === 1 ? "" : "s"} along the KZN coast in the last 48h`}
           </p>
         </div>
         <div className="relative hidden sm:flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-white/10 backdrop-blur-sm text-xs font-medium">
