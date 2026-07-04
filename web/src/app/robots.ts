@@ -7,7 +7,7 @@ export default function robots(): MetadataRoute.Robots {
         userAgent: "*",
         allow: "/",
         // Keep logged-in app pages and admin out of search results
-        disallow: ["/app/", "/admin/"],
+        disallow: ["/app/", "/admin/", "/login", "/register", "/cookies", "/forgot-password", "/reset-password"],
       },
     ],
     sitemap: "https://sardinewatch.co.za/sitemap.xml",
