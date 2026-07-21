@@ -55,12 +55,12 @@ async function sendPushToUsers(userIds: number[], payload: PushPayload): Promise
   if (!VAPID_PUBLIC_KEY || !VAPID_PRIVATE_KEY) return 0;
 
   const pool = await getPool();
-  const idList = userIds.join(",");
 
-  const subs = await pool.request().query<PushSubscriptionRow>(
+  const subsResult = await pool.query<PushSubscriptionRow>(
     `SELECT id, user_id, endpoint, p256dh, auth
        FROM PushSubscriptions
-      WHERE user_id IN (${idList})`
+      WHERE user_id = ANY($1)`,
+    [userIds]
   );
 
   const body =
@@ -78,7 +78,7 @@ async function sendPushToUsers(userIds: number[], payload: PushPayload): Promise
   let sent = 0;
   const expiredIds: number[] = [];
 
-  for (const sub of subs.recordset) {
+  for (const sub of subsResult.rows) {
     try {
       await webpush.sendNotification(
         { endpoint: sub.endpoint, keys: { p256dh: sub.p256dh, auth: sub.auth } },
@@ -95,11 +95,11 @@ async function sendPushToUsers(userIds: number[], payload: PushPayload): Promise
     }
   }
 
-  // Clean up just the expired endpoints, not the whole user's push state
   if (expiredIds.length > 0) {
-    await pool
-      .request()
-      .query(`DELETE FROM PushSubscriptions WHERE id IN (${expiredIds.join(",")})`);
+    await pool.query(
+      `DELETE FROM PushSubscriptions WHERE id = ANY($1)`,
+      [expiredIds]
+    );
     console.log(`[notifications] pruned ${expiredIds.length} expired subscription(s)`);
   }
 
@@ -113,29 +113,21 @@ async function sendPushToUsers(userIds: number[], payload: PushPayload): Promise
 export async function notifyNewSighting(sighting: SightingInput): Promise<number> {
   const pool = await getPool();
 
-  // Every active user except the reporter gets an in-app notification.
-  // We insert one row per recipient.
-  await pool
-    .request()
-    .input("reporterId", sighting.userId)
-    .input("sightingId", sighting.id)
-    .query(`
-      INSERT INTO Notifications (user_id, sighting_id, kind, actor_id, is_read, created_at)
-      SELECT u.id, @sightingId, 'sighting', @reporterId, 0, GETDATE()
-        FROM Users u
-       WHERE u.id <> @reporterId
-         AND u.is_active = 1
-    `);
+  await pool.query(
+    `INSERT INTO Notifications (user_id, sighting_id, kind, actor_id, is_read, created_at)
+     SELECT u.id, $1, 'sighting', $2, FALSE, NOW()
+       FROM Users u
+      WHERE u.id <> $2
+        AND u.is_active = TRUE`,
+    [sighting.id, sighting.userId]
+  );
 
-  // Collect those same user ids for the push fan-out.
-  const recipients = await pool
-    .request()
-    .input("reporterId", sighting.userId)
-    .query<{ id: number }>(
-      "SELECT id FROM Users WHERE id <> @reporterId AND is_active = 1"
-    );
+  const recipientsResult = await pool.query<{ id: number }>(
+    "SELECT id FROM Users WHERE id <> $1 AND is_active = TRUE",
+    [sighting.userId]
+  );
 
-  const userIds = recipients.recordset.map((r) => r.id);
+  const userIds = recipientsResult.rows.map((r) => r.id);
 
   return sendPushToUsers(userIds, {
     title: `${sighting.nickname} spotted sardines!`,
@@ -146,48 +138,37 @@ export async function notifyNewSighting(sighting: SightingInput): Promise<number
 }
 
 /**
- * Fires when someone comments on a sighting (Facebook-style).
+ * Fires when someone comments on a sighting.
  * Recipients: the sighting author + everyone else who has previously
  * commented on the same sighting, MINUS the commenter themselves.
  */
 export async function notifyNewComment(comment: CommentInput): Promise<number> {
   const pool = await getPool();
 
-  // Build the recipient list:
-  //   sighting author + distinct previous commenters
-  //   minus the commenter themselves
-  //   minus inactive users
-  const recipients = await pool
-    .request()
-    .input("sightingId", comment.sightingId)
-    .input("actorId", comment.actorUserId)
-    .query<{ id: number }>(`
-      SELECT DISTINCT u.id
-        FROM Users u
-        JOIN (
-          SELECT s.user_id AS uid FROM Sightings s WHERE s.id = @sightingId
-          UNION
-          SELECT c.user_id FROM Comments c WHERE c.sighting_id = @sightingId
-        ) participants ON participants.uid = u.id
-       WHERE u.is_active = 1
-         AND u.id <> @actorId
-    `);
+  const recipientsResult = await pool.query<{ id: number }>(
+    `SELECT DISTINCT u.id
+       FROM Users u
+       JOIN (
+         SELECT s.user_id AS uid FROM Sightings s WHERE s.id = $1
+         UNION
+         SELECT c.user_id FROM Comments c WHERE c.sighting_id = $1
+       ) participants ON participants.uid = u.id
+      WHERE u.is_active = TRUE
+        AND u.id <> $2`,
+    [comment.sightingId, comment.actorUserId]
+  );
 
-  const userIds = recipients.recordset.map((r) => r.id);
+  const userIds = recipientsResult.rows.map((r) => r.id);
   if (userIds.length === 0) return 0;
 
-  // Bulk insert the in-app notification rows
-  const userTable = userIds.map((id) => `(${id})`).join(",");
-  await pool
-    .request()
-    .input("sightingId", comment.sightingId)
-    .input("commentId", comment.id)
-    .input("actorId", comment.actorUserId)
-    .query(`
-      INSERT INTO Notifications (user_id, sighting_id, kind, actor_id, comment_id, is_read, created_at)
-      SELECT v.user_id, @sightingId, 'comment', @actorId, @commentId, 0, GETDATE()
-        FROM (VALUES ${userTable}) AS v(user_id)
-    `);
+  // Bulk insert in-app notifications
+  for (const userId of userIds) {
+    await pool.query(
+      `INSERT INTO Notifications (user_id, sighting_id, kind, actor_id, comment_id, is_read, created_at)
+       VALUES ($1, $2, 'comment', $3, $4, FALSE, NOW())`,
+      [userId, comment.sightingId, comment.actorUserId, comment.id]
+    );
+  }
 
   return sendPushToUsers(userIds, {
     title: `${comment.actorNickname} commented`,
@@ -198,38 +179,27 @@ export async function notifyNewComment(comment: CommentInput): Promise<number> {
 }
 
 /**
- * Fires the first time a given user likes a given sighting. The route already
- * filters out self-likes and only calls us on a fresh INSERT, so this function
- * unconditionally notifies the author. We also dedupe at the in-app layer in
- * case the same liker re-likes after an unlike — only one notification row per
- * (recipient, sighting, actor, kind='like').
+ * Fires the first time a given user likes a given sighting.
  */
 export async function notifyNewLike(like: LikeInput): Promise<number> {
   const pool = await getPool();
 
-  // Idempotent insert: if there's already a 'like' notification from this actor
-  // to this author for this sighting, we skip. Cap at one notification per
-  // unique like pairing — same way Facebook does it.
-  const inserted = await pool
-    .request()
-    .input("authorId", like.authorId)
-    .input("sightingId", like.sightingId)
-    .input("actorId", like.actorUserId)
-    .query(`
-      INSERT INTO Notifications (user_id, sighting_id, kind, actor_id, is_read, created_at)
-      OUTPUT INSERTED.id
-      SELECT @authorId, @sightingId, 'like', @actorId, 0, GETDATE()
-      WHERE NOT EXISTS (
-        SELECT 1 FROM Notifications
-        WHERE user_id = @authorId
-          AND sighting_id = @sightingId
-          AND kind = 'like'
-          AND actor_id = @actorId
-      )
-    `);
+  // Idempotent: only insert if no like notification already exists for this pairing
+  const result = await pool.query(
+    `INSERT INTO Notifications (user_id, sighting_id, kind, actor_id, is_read, created_at)
+     SELECT $1, $2, 'like', $3, FALSE, NOW()
+     WHERE NOT EXISTS (
+       SELECT 1 FROM Notifications
+       WHERE user_id = $1
+         AND sighting_id = $2
+         AND kind = 'like'
+         AND actor_id = $3
+     )
+     RETURNING id`,
+    [like.authorId, like.sightingId, like.actorUserId]
+  );
 
-  // No fresh row → already notified for this pairing, don't push again.
-  if (inserted.recordset.length === 0) return 0;
+  if (result.rows.length === 0) return 0;
 
   return sendPushToUsers([like.authorId], {
     title: `${like.actorNickname} liked your sighting`,

@@ -11,28 +11,25 @@ router.get("/:sightingId", authenticateOptional, async (req: AuthRequest, res: R
   try {
     const pool = await getPool();
 
-    const result = await pool
-      .request()
-      .input("sightingId", Number(req.params.sightingId))
-      .query(
-        `SELECT c.*, u.nickname, u.avatar_url
-         FROM Comments c
-         JOIN Users u ON c.user_id = u.id
-         WHERE c.sighting_id = @sightingId
-         ORDER BY c.created_at ASC`
-      );
+    const result = await pool.query(
+      `SELECT c.*, u.nickname, u.avatar_url
+       FROM Comments c
+       JOIN Users u ON c.user_id = u.id
+       WHERE c.sighting_id = $1
+       ORDER BY c.created_at ASC`,
+      [Number(req.params.sightingId)]
+    );
 
     const isAdmin = (req as AuthRequest).user?.role === "admin";
 
     res.json({
       success: true,
-      data: result.recordset.map((row: Record<string, unknown>) => ({
+      data: result.rows.map((row: Record<string, unknown>) => ({
         id: row.id,
         sightingId: row.sighting_id,
         userId: row.user_id,
         nickname: row.nickname,
         avatarUrl: row.avatar_url,
-        // Admins see the original text; everyone else gets a censored copy
         text: isAdmin ? row.text : censor(row.text as string),
         createdAt: row.created_at,
       })),
@@ -54,27 +51,21 @@ router.post("/:sightingId", authenticate, async (req: AuthRequest, res: Response
 
     const pool = await getPool();
 
-    const result = await pool
-      .request()
-      .input("sightingId", Number(req.params.sightingId))
-      .input("userId", req.user!.userId)
-      .input("text", text.trim())
-      .query(
-        `INSERT INTO Comments (sighting_id, user_id, text, created_at)
-         OUTPUT INSERTED.id, INSERTED.created_at
-         VALUES (@sightingId, @userId, @text, GETDATE())`
-      );
+    const result = await pool.query(
+      `INSERT INTO Comments (sighting_id, user_id, text, created_at)
+       VALUES ($1, $2, $3, NOW())
+       RETURNING id, created_at`,
+      [Number(req.params.sightingId), req.user!.userId, text.trim()]
+    );
 
-    const comment = result.recordset[0];
+    const comment = result.rows[0];
 
-    // Look up the commenter's nickname for the push payload
-    const actorResult = await pool
-      .request()
-      .input("uid", req.user!.userId)
-      .query("SELECT nickname FROM Users WHERE id = @uid");
-    const actorNickname = actorResult.recordset[0]?.nickname || "Someone";
+    const actorResult = await pool.query(
+      "SELECT nickname FROM Users WHERE id = $1",
+      [req.user!.userId]
+    );
+    const actorNickname = actorResult.rows[0]?.nickname || "Someone";
 
-    // Fire-and-forget: in-app + push to sighting author + previous commenters
     notifyNewComment({
       id: comment.id,
       sightingId: Number(req.params.sightingId),
@@ -99,19 +90,6 @@ router.post("/:sightingId", authenticate, async (req: AuthRequest, res: Response
   }
 });
 
-/**
- * Delete a comment. Allowed if either:
- *   - the caller authored the comment, OR
- *   - the caller is an admin (community moderation).
- *
- * When a moderator removes someone else's comment we record the action
- * in ModerationLog so the deletion is auditable. The comment row is
- * hard-deleted; ON DELETE CASCADE on Notifications.comment_id (see
- * migration 003) cleans up any "X commented on your sighting" rows.
- *
- * Body (optional):
- *   { reason?: string }   moderator's note, stored on the audit log
- */
 router.delete("/:id", authenticate, async (req: AuthRequest, res: Response) => {
   try {
     const commentId = Number(req.params.id);
@@ -121,20 +99,18 @@ router.delete("/:id", authenticate, async (req: AuthRequest, res: Response) => {
     }
 
     const pool = await getPool();
-    const lookup = await pool
-      .request()
-      .input("id", commentId)
-      .query(
-        `SELECT id, sighting_id, user_id, text, created_at
-           FROM Comments WHERE id = @id`
-      );
+    const lookup = await pool.query(
+      `SELECT id, sighting_id, user_id, text, created_at
+       FROM Comments WHERE id = $1`,
+      [commentId]
+    );
 
-    if (lookup.recordset.length === 0) {
+    if (lookup.rows.length === 0) {
       res.status(404).json({ error: "Comment not found" });
       return;
     }
 
-    const row = lookup.recordset[0];
+    const row = lookup.rows[0];
     const isOwner = row.user_id === req.user!.userId;
     const isModerator = req.user!.role === "admin";
 
@@ -143,20 +119,8 @@ router.delete("/:id", authenticate, async (req: AuthRequest, res: Response) => {
       return;
     }
 
-    // Tidy up notifications that point at this comment first. The FK on
-    // Notifications.comment_id is ON DELETE SET NULL (not CASCADE — see the
-    // explainer in schema.sql), so if we skipped this we'd be left with
-    // "X commented on your sighting" rows whose comment_id is null and that
-    // can't be opened. Removing them keeps the inbox tidy.
-    await pool
-      .request()
-      .input("id", commentId)
-      .query("DELETE FROM Notifications WHERE comment_id = @id");
-
-    await pool
-      .request()
-      .input("id", commentId)
-      .query("DELETE FROM Comments WHERE id = @id");
+    await pool.query("DELETE FROM Notifications WHERE comment_id = $1", [commentId]);
+    await pool.query("DELETE FROM Comments WHERE id = $1", [commentId]);
 
     if (isModerator && !isOwner) {
       logModeration({

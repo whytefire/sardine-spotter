@@ -9,67 +9,61 @@ const router = Router();
 
 router.get("/", authenticateOptional, async (req: AuthRequest, res: Response) => {
   try {
-    const { lat, lng, radius = 50, page = 1, limit = 20 } = req.query;
+    const { lat, lng, page = 1, limit = 20 } = req.query;
     const pool = await getPool();
 
     const offset = (Number(page) - 1) * Number(limit);
-    const viewerId = req.user?.userId ?? 0; // 0 → never matches a real user, so likedByMe is always 0 for guests
+    const viewerId = req.user?.userId ?? 0;
 
-    let query: string;
-    const request = pool.request()
-      .input("limit", Number(limit))
-      .input("offset", offset)
-      .input("viewerId", viewerId);
+    let result;
 
-    // Always show all coast-wide sightings — the sardine run spans hundreds of km
-    // so a radius filter makes no sense for the feed. GPS coords are still used
-    // to calculate and display distance on each card.
     if (lat && lng) {
-      query = `
-        SELECT s.*, u.nickname, u.avatar_url,
-          (SELECT COUNT(*) FROM Comments c WHERE c.sighting_id = s.id) AS comment_count,
-          (SELECT COUNT(*) FROM SightingLikes l WHERE l.sighting_id = s.id) AS like_count,
-          CAST(CASE WHEN EXISTS (
-            SELECT 1 FROM SightingLikes l
-            WHERE l.sighting_id = s.id AND l.user_id = @viewerId
-          ) THEN 1 ELSE 0 END AS BIT) AS liked_by_me,
-          geography::Point(s.latitude, s.longitude, 4326).STDistance(
-            geography::Point(@lat, @lng, 4326)
-          ) / 1000.0 AS distance_km
-        FROM Sightings s
-        JOIN Users u ON s.user_id = u.id
-        WHERE s.is_active = 1
-          AND (s.is_pinned = 1 OR s.created_at >= DATEADD(hour, -48, GETDATE()))
-        ORDER BY s.is_pinned DESC, s.created_at DESC
-        OFFSET @offset ROWS FETCH NEXT @limit ROWS ONLY
-      `;
-      request.input("lat", Number(lat));
-      request.input("lng", Number(lng));
+      // Use Haversine formula for distance calculation (no PostGIS needed)
+      result = await pool.query(
+        `SELECT s.*, u.nickname, u.avatar_url,
+           (SELECT COUNT(*) FROM Comments c WHERE c.sighting_id = s.id)::int AS comment_count,
+           (SELECT COUNT(*) FROM SightingLikes l WHERE l.sighting_id = s.id)::int AS like_count,
+           EXISTS (
+             SELECT 1 FROM SightingLikes l
+             WHERE l.sighting_id = s.id AND l.user_id = $3
+           ) AS liked_by_me,
+           6371 * acos(
+             LEAST(1, cos(radians($1)) * cos(radians(s.latitude))
+               * cos(radians(s.longitude) - radians($2))
+               + sin(radians($1)) * sin(radians(s.latitude)))
+           ) AS distance_km
+         FROM Sightings s
+         JOIN Users u ON s.user_id = u.id
+         WHERE s.is_active = TRUE
+           AND (s.is_pinned = TRUE OR s.created_at >= NOW() - INTERVAL '48 hours')
+         ORDER BY s.is_pinned DESC, s.created_at DESC
+         LIMIT $4 OFFSET $5`,
+        [Number(lat), Number(lng), viewerId, Number(limit), offset]
+      );
     } else {
-      query = `
-        SELECT s.*, u.nickname, u.avatar_url,
-          (SELECT COUNT(*) FROM Comments c WHERE c.sighting_id = s.id) AS comment_count,
-          (SELECT COUNT(*) FROM SightingLikes l WHERE l.sighting_id = s.id) AS like_count,
-          CAST(CASE WHEN EXISTS (
-            SELECT 1 FROM SightingLikes l
-            WHERE l.sighting_id = s.id AND l.user_id = @viewerId
-          ) THEN 1 ELSE 0 END AS BIT) AS liked_by_me
-        FROM Sightings s
-        JOIN Users u ON s.user_id = u.id
-        WHERE s.is_active = 1
-          AND (s.is_pinned = 1 OR s.created_at >= DATEADD(hour, -48, GETDATE()))
-        ORDER BY s.is_pinned DESC, s.created_at DESC
-        OFFSET @offset ROWS FETCH NEXT @limit ROWS ONLY
-      `;
+      result = await pool.query(
+        `SELECT s.*, u.nickname, u.avatar_url,
+           (SELECT COUNT(*) FROM Comments c WHERE c.sighting_id = s.id)::int AS comment_count,
+           (SELECT COUNT(*) FROM SightingLikes l WHERE l.sighting_id = s.id)::int AS like_count,
+           EXISTS (
+             SELECT 1 FROM SightingLikes l
+             WHERE l.sighting_id = s.id AND l.user_id = $1
+           ) AS liked_by_me
+         FROM Sightings s
+         JOIN Users u ON s.user_id = u.id
+         WHERE s.is_active = TRUE
+           AND (s.is_pinned = TRUE OR s.created_at >= NOW() - INTERVAL '48 hours')
+         ORDER BY s.is_pinned DESC, s.created_at DESC
+         LIMIT $2 OFFSET $3`,
+        [viewerId, Number(limit), offset]
+      );
     }
-
-    const result = await request.query(query);
 
     const isAdmin = req.user?.role === "admin";
 
     res.json({
       success: true,
-      data: result.recordset.map((row: Record<string, unknown>) => ({
+      data: result.rows.map((row: Record<string, unknown>) => ({
         id: row.id,
         userId: row.user_id,
         nickname: row.nickname,
@@ -80,7 +74,7 @@ router.get("/", authenticateOptional, async (req: AuthRequest, res: Response) =>
         photoUrl: row.photo_url,
         category: row.category,
         createdAt: row.created_at,
-        distanceKm: row.distance_km ?? null,
+        distanceKm: row.distance_km != null ? Number(row.distance_km) : null,
         commentCount: row.comment_count,
         likeCount: row.like_count,
         likedByMe: !!row.liked_by_me,
@@ -104,30 +98,28 @@ router.post("/", authenticate, async (req: AuthRequest, res: Response) => {
 
     const pool = await getPool();
 
-    const result = await pool
-      .request()
-      .input("userId", req.user!.userId)
-      .input("description", description)
-      .input("latitude", latitude)
-      .input("longitude", longitude)
-      .input("category", category || "sardine_sighting")
-      .input("photoUrl", photoUrl || null)
-      .query(
-        `INSERT INTO Sightings (user_id, description, latitude, longitude, category, photo_url, created_at)
-         OUTPUT INSERTED.id, INSERTED.created_at
-         VALUES (@userId, @description, @latitude, @longitude, @category, @photoUrl, GETDATE())`
-      );
+    const result = await pool.query(
+      `INSERT INTO Sightings (user_id, description, latitude, longitude, category, photo_url, created_at)
+       VALUES ($1, $2, $3, $4, $5, $6, NOW())
+       RETURNING id, created_at`,
+      [
+        req.user!.userId,
+        description,
+        latitude,
+        longitude,
+        category || "sardine_sighting",
+        photoUrl || null,
+      ]
+    );
 
-    const sighting = result.recordset[0];
+    const sighting = result.rows[0];
 
-    // Fetch the user's nickname for the notification
-    const userResult = await pool
-      .request()
-      .input("uid", req.user!.userId)
-      .query("SELECT nickname FROM Users WHERE id = @uid");
-    const nickname = userResult.recordset[0]?.nickname || "Someone";
+    const userResult = await pool.query(
+      "SELECT nickname FROM Users WHERE id = $1",
+      [req.user!.userId]
+    );
+    const nickname = userResult.rows[0]?.nickname || "Someone";
 
-    // Fire-and-forget: in-app + push to every other active user
     notifyNewSighting({
       id: sighting.id,
       userId: req.user!.userId,
@@ -157,7 +149,7 @@ router.post("/", authenticate, async (req: AuthRequest, res: Response) => {
 /**
  * Edit a sighting's description, photo, or category.
  * Allowed for the original reporter and for admins.
- * Deliberately does NOT send any push notifications.
+ * Does NOT send push notifications.
  */
 router.put("/:id", authenticate, async (req: AuthRequest, res: Response) => {
   try {
@@ -169,17 +161,17 @@ router.put("/:id", authenticate, async (req: AuthRequest, res: Response) => {
 
     const pool = await getPool();
 
-    const check = await pool
-      .request()
-      .input("id", sightingId)
-      .query("SELECT id, user_id FROM Sightings WHERE id = @id AND is_active = 1");
+    const check = await pool.query(
+      "SELECT id, user_id FROM Sightings WHERE id = $1 AND is_active = TRUE",
+      [sightingId]
+    );
 
-    if (check.recordset.length === 0) {
+    if (check.rows.length === 0) {
       res.status(404).json({ error: "Sighting not found" });
       return;
     }
 
-    const isOwner = check.recordset[0].user_id === req.user!.userId;
+    const isOwner = check.rows[0].user_id === req.user!.userId;
     const isAdmin = req.user!.role === "admin";
 
     if (!isOwner && !isAdmin) {
@@ -194,21 +186,21 @@ router.put("/:id", authenticate, async (req: AuthRequest, res: Response) => {
       return;
     }
 
-    // Build SET clause only for fields that were actually provided
     const setParts: string[] = [];
-    const req2 = pool.request().input("id", sightingId);
+    const values: unknown[] = [];
+    let idx = 1;
 
     if (description !== undefined) {
-      setParts.push("description = @description");
-      req2.input("description", description.trim());
+      setParts.push(`description = $${idx++}`);
+      values.push(description.trim());
     }
     if (photoUrl !== undefined) {
-      setParts.push("photo_url = @photoUrl");
-      req2.input("photoUrl", photoUrl || null);
+      setParts.push(`photo_url = $${idx++}`);
+      values.push(photoUrl || null);
     }
     if (category !== undefined) {
-      setParts.push("category = @category");
-      req2.input("category", category);
+      setParts.push(`category = $${idx++}`);
+      values.push(category);
     }
 
     if (setParts.length === 0) {
@@ -216,14 +208,18 @@ router.put("/:id", authenticate, async (req: AuthRequest, res: Response) => {
       return;
     }
 
-    await req2.query(`UPDATE Sightings SET ${setParts.join(", ")} WHERE id = @id`);
+    values.push(sightingId);
+    await pool.query(
+      `UPDATE Sightings SET ${setParts.join(", ")} WHERE id = $${idx}`,
+      values
+    );
 
-    const updated = await pool
-      .request()
-      .input("id", sightingId)
-      .query("SELECT * FROM Sightings WHERE id = @id");
+    const updated = await pool.query(
+      "SELECT * FROM Sightings WHERE id = $1",
+      [sightingId]
+    );
 
-    const row = updated.recordset[0];
+    const row = updated.rows[0];
     res.json({
       success: true,
       data: {
@@ -244,29 +240,26 @@ router.get("/:id", authenticateOptional, async (req: AuthRequest, res: Response)
     const pool = await getPool();
     const viewerId = req.user?.userId ?? 0;
 
-    const result = await pool
-      .request()
-      .input("id", Number(req.params.id))
-      .input("viewerId", viewerId)
-      .query(
-        `SELECT s.*, u.nickname, u.avatar_url,
-          (SELECT COUNT(*) FROM Comments c WHERE c.sighting_id = s.id) AS comment_count,
-          (SELECT COUNT(*) FROM SightingLikes l WHERE l.sighting_id = s.id) AS like_count,
-          CAST(CASE WHEN EXISTS (
-            SELECT 1 FROM SightingLikes l
-            WHERE l.sighting_id = s.id AND l.user_id = @viewerId
-          ) THEN 1 ELSE 0 END AS BIT) AS liked_by_me
-         FROM Sightings s
-         JOIN Users u ON s.user_id = u.id
-         WHERE s.id = @id AND s.is_active = 1`
-      );
+    const result = await pool.query(
+      `SELECT s.*, u.nickname, u.avatar_url,
+         (SELECT COUNT(*) FROM Comments c WHERE c.sighting_id = s.id)::int AS comment_count,
+         (SELECT COUNT(*) FROM SightingLikes l WHERE l.sighting_id = s.id)::int AS like_count,
+         EXISTS (
+           SELECT 1 FROM SightingLikes l
+           WHERE l.sighting_id = s.id AND l.user_id = $2
+         ) AS liked_by_me
+       FROM Sightings s
+       JOIN Users u ON s.user_id = u.id
+       WHERE s.id = $1 AND s.is_active = TRUE`,
+      [Number(req.params.id), viewerId]
+    );
 
-    if (result.recordset.length === 0) {
+    if (result.rows.length === 0) {
       res.status(404).json({ error: "Sighting not found" });
       return;
     }
 
-    const row = result.recordset[0];
+    const row = result.rows[0];
     const isAdmin = req.user?.role === "admin";
     res.json({
       success: true,
@@ -292,54 +285,39 @@ router.get("/:id", authenticateOptional, async (req: AuthRequest, res: Response)
   }
 });
 
-/**
- * Like a sighting. Idempotent — re-POSTing has no effect after the first call.
- * The first time a given user likes a sighting, the author gets a push
- * notification (unless the author is liking their own sighting).
- */
 router.post("/:id/like", authenticate, async (req: AuthRequest, res: Response) => {
   try {
     const sightingId = Number(req.params.id);
     const userId = req.user!.userId;
     const pool = await getPool();
 
-    // Confirm sighting exists + grab author id for the notification
-    const check = await pool
-      .request()
-      .input("id", sightingId)
-      .query("SELECT user_id FROM Sightings WHERE id = @id");
+    const check = await pool.query(
+      "SELECT user_id FROM Sightings WHERE id = $1",
+      [sightingId]
+    );
 
-    if (check.recordset.length === 0) {
+    if (check.rows.length === 0) {
       res.status(404).json({ error: "Sighting not found" });
       return;
     }
 
-    const authorId = check.recordset[0].user_id as number;
+    const authorId = check.rows[0].user_id as number;
 
-    // INSERT … WHERE NOT EXISTS is an atomic, deduped insert. OUTPUT tells us
-    // whether a row was actually inserted (i.e. this is a fresh like and we
-    // should fire a notification).
-    const inserted = await pool
-      .request()
-      .input("sightingId", sightingId)
-      .input("userId", userId)
-      .query(`
-        INSERT INTO SightingLikes (sighting_id, user_id, created_at)
-        OUTPUT INSERTED.id
-        SELECT @sightingId, @userId, GETDATE()
-        WHERE NOT EXISTS (
-          SELECT 1 FROM SightingLikes
-          WHERE sighting_id = @sightingId AND user_id = @userId
-        )
-      `);
+    // INSERT ... ON CONFLICT DO NOTHING is idempotent
+    const inserted = await pool.query(
+      `INSERT INTO SightingLikes (sighting_id, user_id, created_at)
+       VALUES ($1, $2, NOW())
+       ON CONFLICT (sighting_id, user_id) DO NOTHING
+       RETURNING id`,
+      [sightingId, userId]
+    );
 
-    // Fan-out only on a real insert AND only when the liker isn't the author
-    if (inserted.recordset.length > 0 && authorId !== userId) {
-      const actorResult = await pool
-        .request()
-        .input("uid", userId)
-        .query("SELECT nickname FROM Users WHERE id = @uid");
-      const actorNickname = actorResult.recordset[0]?.nickname || "Someone";
+    if (inserted.rows.length > 0 && authorId !== userId) {
+      const actorResult = await pool.query(
+        "SELECT nickname FROM Users WHERE id = $1",
+        [userId]
+      );
+      const actorNickname = actorResult.rows[0]?.nickname || "Someone";
 
       notifyNewLike({
         sightingId,
@@ -349,17 +327,14 @@ router.post("/:id/like", authenticate, async (req: AuthRequest, res: Response) =
       }).catch((err) => console.error("Like notification error:", err));
     }
 
-    // Always return the current count so the client can sync
-    const count = await pool
-      .request()
-      .input("sightingId", sightingId)
-      .query<{ c: number }>(
-        "SELECT COUNT(*) AS c FROM SightingLikes WHERE sighting_id = @sightingId"
-      );
+    const count = await pool.query(
+      "SELECT COUNT(*)::int AS c FROM SightingLikes WHERE sighting_id = $1",
+      [sightingId]
+    );
 
     res.status(201).json({
       success: true,
-      data: { likeCount: count.recordset[0].c, likedByMe: true },
+      data: { likeCount: count.rows[0].c, likedByMe: true },
     });
   } catch (err) {
     console.error("Like sighting error:", err);
@@ -367,31 +342,25 @@ router.post("/:id/like", authenticate, async (req: AuthRequest, res: Response) =
   }
 });
 
-/** Unlike a sighting. Idempotent. Does NOT undo the original notification. */
 router.delete("/:id/like", authenticate, async (req: AuthRequest, res: Response) => {
   try {
     const sightingId = Number(req.params.id);
     const userId = req.user!.userId;
     const pool = await getPool();
 
-    await pool
-      .request()
-      .input("sightingId", sightingId)
-      .input("userId", userId)
-      .query(
-        "DELETE FROM SightingLikes WHERE sighting_id = @sightingId AND user_id = @userId"
-      );
+    await pool.query(
+      "DELETE FROM SightingLikes WHERE sighting_id = $1 AND user_id = $2",
+      [sightingId, userId]
+    );
 
-    const count = await pool
-      .request()
-      .input("sightingId", sightingId)
-      .query<{ c: number }>(
-        "SELECT COUNT(*) AS c FROM SightingLikes WHERE sighting_id = @sightingId"
-      );
+    const count = await pool.query(
+      "SELECT COUNT(*)::int AS c FROM SightingLikes WHERE sighting_id = $1",
+      [sightingId]
+    );
 
     res.json({
       success: true,
-      data: { likeCount: count.recordset[0].c, likedByMe: false },
+      data: { likeCount: count.rows[0].c, likedByMe: false },
     });
   } catch (err) {
     console.error("Unlike sighting error:", err);
@@ -399,24 +368,6 @@ router.delete("/:id/like", authenticate, async (req: AuthRequest, res: Response)
   }
 });
 
-/**
- * Remove a sighting. Two different behaviours depending on who calls it:
- *
- *   Owner (reporter)
- *     → Hard DELETE. It's their content, POPIA gives them the right to
- *       fully erase it. No audit log entry needed (self-action).
- *
- *   Admin moderating someone else's content
- *     → Soft-delete: sets is_active = 0 so the row is preserved as
- *       evidence (useful for SAHRC / Equality Court matters) but the
- *       sighting disappears from the public feed and map immediately.
- *     → Writes a ModerationLog row containing a full snapshot of the
- *       sighting at the time of deactivation, plus the admin's reason.
- *     → The sighting can be reinstated via PUT /api/sightings/:id/reinstate.
- *
- * Body (optional):
- *   { reason?: string }   moderator's note, stored on the audit log
- */
 router.delete("/:id", authenticate, async (req: AuthRequest, res: Response) => {
   try {
     const sightingId = Number(req.params.id);
@@ -427,21 +378,19 @@ router.delete("/:id", authenticate, async (req: AuthRequest, res: Response) => {
 
     const pool = await getPool();
 
-    const check = await pool
-      .request()
-      .input("id", sightingId)
-      .query(
-        `SELECT id, user_id, description, category, latitude, longitude,
-                photo_url, is_active, created_at
-           FROM Sightings WHERE id = @id`
-      );
+    const check = await pool.query(
+      `SELECT id, user_id, description, category, latitude, longitude,
+              photo_url, is_active, created_at
+       FROM Sightings WHERE id = $1`,
+      [sightingId]
+    );
 
-    if (check.recordset.length === 0) {
+    if (check.rows.length === 0) {
       res.status(404).json({ error: "Sighting not found" });
       return;
     }
 
-    const row = check.recordset[0];
+    const row = check.rows[0];
     const isOwner = row.user_id === req.user!.userId;
     const isModerator = req.user!.role === "admin";
 
@@ -451,17 +400,9 @@ router.delete("/:id", authenticate, async (req: AuthRequest, res: Response) => {
     }
 
     if (isOwner && !isModerator) {
-      // Owner removing their own content — hard delete
-      await pool
-        .request()
-        .input("id", sightingId)
-        .query("DELETE FROM Sightings WHERE id = @id");
+      await pool.query("DELETE FROM Sightings WHERE id = $1", [sightingId]);
     } else {
-      // Admin moderating someone else's content — soft deactivate
-      await pool
-        .request()
-        .input("id", sightingId)
-        .query("UPDATE Sightings SET is_active = 0 WHERE id = @id");
+      await pool.query("UPDATE Sightings SET is_active = FALSE WHERE id = $1", [sightingId]);
 
       logModeration({
         moderatorId: req.user!.userId,
@@ -491,7 +432,6 @@ router.delete("/:id", authenticate, async (req: AuthRequest, res: Response) => {
 
 /**
  * Pin or unpin a sighting. Admin only.
- * PUT /api/sightings/:id/pin   { pinned: true | false }
  */
 router.put("/:id/pin", authenticate, async (req: AuthRequest, res: Response) => {
   try {
@@ -506,11 +446,7 @@ router.put("/:id/pin", authenticate, async (req: AuthRequest, res: Response) => 
     }
     const pinned = req.body?.pinned === true || req.body?.pinned === 1;
     const pool = await getPool();
-    await pool
-      .request()
-      .input("id", sightingId)
-      .input("pinned", pinned ? 1 : 0)
-      .query("UPDATE Sightings SET is_pinned = @pinned WHERE id = @id");
+    await pool.query("UPDATE Sightings SET is_pinned = $1 WHERE id = $2", [pinned, sightingId]);
     res.json({ success: true, isPinned: pinned });
   } catch (err) {
     console.error("Pin sighting error:", err);
@@ -519,8 +455,7 @@ router.put("/:id/pin", authenticate, async (req: AuthRequest, res: Response) => 
 });
 
 /**
- * Reinstate a sighting that was soft-deactivated by a moderator.
- * Admin only — sets is_active back to 1.
+ * Reinstate a soft-deactivated sighting. Admin only.
  */
 router.put("/:id/reinstate", authenticate, async (req: AuthRequest, res: Response) => {
   try {
@@ -530,10 +465,7 @@ router.put("/:id/reinstate", authenticate, async (req: AuthRequest, res: Respons
     }
     const sightingId = Number(req.params.id);
     const pool = await getPool();
-    await pool
-      .request()
-      .input("id", sightingId)
-      .query("UPDATE Sightings SET is_active = 1 WHERE id = @id");
+    await pool.query("UPDATE Sightings SET is_active = TRUE WHERE id = $1", [sightingId]);
     res.json({ success: true });
   } catch (err) {
     console.error("Reinstate sighting error:", err);

@@ -38,16 +38,15 @@ export async function authenticate(
   }
 
   // Check the user is still active on every authenticated request so a ban
-  // takes effect immediately — the banned user's next API call gets a 403
-  // and the frontend clears their session and redirects to login.
+  // takes effect immediately.
   try {
     const pool = await getPool();
-    const result = await pool
-      .request()
-      .input("id", payload.userId)
-      .query("SELECT is_active, ban_reason FROM Users WHERE id = @id");
+    const result = await pool.query(
+      "SELECT is_active, ban_reason FROM Users WHERE id = $1",
+      [payload.userId]
+    );
 
-    const row = result.recordset[0];
+    const row = result.rows[0];
     if (!row || !row.is_active) {
       res.status(403).json({
         error: "banned",
@@ -56,20 +55,13 @@ export async function authenticate(
       return;
     }
   } catch {
-    // If the DB check fails for any reason, still allow the request through
-    // rather than locking everyone out during a connectivity blip.
+    // If the DB check fails, still allow the request through.
   }
 
   req.user = payload;
   next();
 }
 
-/**
- * Like `authenticate`, but doesn't 401 when the caller is anonymous.
- * Sets `req.user` when a valid token is present, otherwise leaves it undefined.
- * Use on endpoints that need to vary their response by login state (e.g.
- * "did THIS user like this sighting?") but still work for guests.
- */
 export function authenticateOptional(
   req: AuthRequest,
   _res: Response,
